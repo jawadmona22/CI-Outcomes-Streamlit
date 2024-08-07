@@ -1,5 +1,5 @@
 streamlit==1.24.0
-pandas==2.0.3
-numpy==1.24.3
-matplotlib==3.7.2
-lxml==4.9.3
+pandas
+numpy
+matplotlib
+lxml
