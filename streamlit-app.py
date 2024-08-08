@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ETree
-import scipy
 
 # Streamlit app title
 st.title("XML Data Analysis with Streamlit")
