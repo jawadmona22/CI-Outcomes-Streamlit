@@ -3,6 +3,32 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ETree
+import scipy as sc
+
+
+
+def sum_harmonics_by_peak(fft_data):
+    # Take the magnitude of the FFT data (ignore the complex part)
+    magnitude = np.abs(fft_data)
+
+    # Find the index of the highest peak (ignoring the DC component at index 0)
+    fundamental_index = np.argmax(magnitude[1:]) + 1  # +1 to adjust for skipping index 0
+
+    # First harmonic is at the fundamental frequency index (highest peak)
+    first_harmonic = magnitude[fundamental_index]
+
+    # Second harmonic is at 2 times the fundamental frequency index
+    second_harmonic_index = 2 * fundamental_index
+    second_harmonic = magnitude[second_harmonic_index] if second_harmonic_index < len(magnitude) else 0
+
+    # Third harmonic is at 3 times the fundamental frequency index
+    third_harmonic_index = 3 * fundamental_index
+    third_harmonic = magnitude[third_harmonic_index] if third_harmonic_index < len(magnitude) else 0
+
+    # Sum of the first, second, and third harmonics
+    harmonic_sum = first_harmonic + second_harmonic + third_harmonic
+
+    return harmonic_sum, fundamental_index
 
 # Streamlit app title
 st.title("XML Data Analysis with Streamlit")
@@ -10,177 +36,220 @@ st.title("XML Data Analysis with Streamlit")
 # Upload XML file
 uploaded_file = st.file_uploader("Choose an XML file", type="xml")
 
-if uploaded_file is not None:
-    # Parse the XML file
-    Tree = ETree.parse(uploaded_file)
-    root = Tree.getroot()
+type = st.selectbox("Analysis Type",["Full Insertion","Round Window"])
 
-    # Display XML structure
-    # st.subheader("XML Structure")
-    # xml_structure = ""
-    # for child in root:
-    #     xml_structure += f"{child.tag} {child.attrib}\n"
-    # st.text(xml_structure)
+if (type == "Round Window"):
+    if uploaded_file is not None:
+        # Parse the XML file
+        Tree = ETree.parse(uploaded_file)
+        root = Tree.getroot()
 
-    # SHEET 1 - ECOCHG Summary
-    A = []  # Assign empty list to use later
-    for elem in root.iter('Measurements'):
-        for subelem in elem:
-            B = {}
-            for i in list(subelem):
-                B.update({i.tag: i.text})
-            A.append(B)
+        # Display XML structure
+        # st.subheader("XML Structure")
+        # xml_structure = ""
+        # for child in root:
+        #     xml_structure += f"{child.tag} {child.attrib}\n"
+        # st.text(xml_structure)
 
-    ECochG_Series = pd.DataFrame(A)
-    ECochG_Series.drop_duplicates(keep='first', inplace=True)
-    ECochG_Series.reset_index(drop=True, inplace=True)
-    ECochG_Series.index = ECochG_Series.index + 1
-
-    st.subheader("ECochG Series Dataframe")
-    st.dataframe(ECochG_Series)
-
-    # PULLING OUT TRACINGS
-    A = []  # Assign empty list to use later
-    AA = []
-    for elem in root.iter('Traces'):
-        for subelem in elem:
-            B = {}
-            C = {}
-            for i in list(subelem):
-                B.update({i.tag: i.text})
+        # SHEET 1 - ECOCHG Summary
+        A = []  # Assign empty list to use later
+        for elem in root.iter('Measurements'):
+            for subelem in elem:
+                B = {}
+                for i in list(subelem):
+                    B.update({i.tag: i.text})
                 A.append(B)
-            C.update(subelem.attrib)
-            AA.append(C)
 
-    df = pd.DataFrame(A)
-    df.drop_duplicates(keep='first', inplace=True)
-    df.reset_index(drop=True, inplace=True)
+        ECochG_Series = pd.DataFrame(A)
+        ECochG_Series.drop_duplicates(keep='first', inplace=True)
+        ECochG_Series.reset_index(drop=True, inplace=True)
+        ECochG_Series.index = ECochG_Series.index + 1
 
-    df1 = pd.DataFrame(AA)
-    df2 = df.join(df1)
-    df2 = df2.loc[df2["PlotType"] == 'TIME']
-    df2 = df2.drop('PlotType', axis=1)
+        st.subheader("ECochG Series Dataframe")
+        st.dataframe(ECochG_Series)
 
-    # Reindex Dataframe
-    df2 = df2.reindex(columns=['TraceType', 'X', 'Y'])
-    condensation = df2[df2['TraceType'] == 'CONDENSATION'].reset_index()
-    rarefaction = df2[df2['TraceType'] == 'RAREFACTION'].reset_index()
-    Sum = df2[df2['TraceType'] == 'SUM'].reset_index()
-    difference = df2[df2['TraceType'] == 'DIFFERENCE'].reset_index()
+        # PULLING OUT TRACINGS
+        A = []  # Assign empty list to use later
+        AA = []
+        for elem in root.iter('Traces'):
+            for subelem in elem:
+                B = {}
+                C = {}
+                for i in list(subelem):
+                    B.update({i.tag: i.text})
+                    A.append(B)
+                C.update(subelem.attrib)
+                AA.append(C)
 
-    # Extract data function
-    def extract_data(df, trace_type):
-        df1 = df['Y'].str.split(" ", expand=True)
-        dfY = df1.T.unstack()
-        df2 = df['X'].str.split(" ", expand=True)
-        dfX = df2.T.unstack()
+        df = pd.DataFrame(A)
+        df.drop_duplicates(keep='first', inplace=True)
+        df.reset_index(drop=True, inplace=True)
 
-        dfX = pd.DataFrame(dfX)
-        dfY = pd.DataFrame(dfY)
+        df1 = pd.DataFrame(AA)
+        df2 = df.join(df1)
+        df2 = df2.loc[df2["PlotType"] == 'TIME']
+        df2 = df2.drop('PlotType', axis=1)
 
-        result_df = pd.merge(dfX, dfY, left_index=True, right_index=True)
-        result_df = result_df.rename(columns={"0_x": "Time(us)", "0_y": "Sample(uV)"})
-        result_df = result_df.reset_index()
-        result_df = result_df.drop(columns=['level_1'])
-        result_df = result_df.rename(columns={"level_0": "Measurement Number"})
-        result_df['Measurement Number'] = result_df['Measurement Number'] + 1
+        # Reindex Dataframe
+        df2 = df2.reindex(columns=['TraceType', 'X', 'Y'])
+        condensation = df2[df2['TraceType'] == 'CONDENSATION'].reset_index()
+        rarefaction = df2[df2['TraceType'] == 'RAREFACTION'].reset_index()
+        Sum = df2[df2['TraceType'] == 'SUM'].reset_index()
+        difference = df2[df2['TraceType'] == 'DIFFERENCE'].reset_index()
 
-        return result_df
+        # Extract data function
+        def extract_data(df, trace_type):
+            df1 = df['Y'].str.split(" ", expand=True)
+            dfY = df1.T.unstack()
+            df2 = df['X'].str.split(" ", expand=True)
+            dfX = df2.T.unstack()
 
-    # Extracting data
-    condensation_data = extract_data(condensation, 'CONDENSATION')
-    rarefaction_data = extract_data(rarefaction, 'RAREFACTION')
-    sum_data = extract_data(Sum, 'SUM')
-    difference_data = extract_data(difference, 'DIFFERENCE')
+            dfX = pd.DataFrame(dfX)
+            dfY = pd.DataFrame(dfY)
 
-    # Display dataframes
-    st.subheader("Condensation Data")
-    st.dataframe(condensation_data)
+            result_df = pd.merge(dfX, dfY, left_index=True, right_index=True)
+            result_df = result_df.rename(columns={"0_x": "Time(us)", "0_y": "Sample(uV)"})
+            result_df = result_df.reset_index()
+            result_df = result_df.drop(columns=['level_1'])
+            result_df = result_df.rename(columns={"level_0": "Measurement Number"})
+            result_df['Measurement Number'] = result_df['Measurement Number'] + 1
 
-    st.subheader("Rarefaction Data")
-    st.dataframe(rarefaction_data)
+            return result_df
 
-    st.subheader("Sum Data")
-    st.dataframe(sum_data)
+        # Extracting data
+        condensation_data = extract_data(condensation, 'CONDENSATION')
+        rarefaction_data = extract_data(rarefaction, 'RAREFACTION')
+        sum_data = extract_data(Sum, 'SUM')
+        difference_data = extract_data(difference, 'DIFFERENCE')
 
-    st.subheader("Difference Data")
-    st.dataframe(difference_data)
+        # Display dataframes
+        st.subheader("Condensation Data")
+        st.dataframe(condensation_data)
 
-    # Select a measurement number
-    st.subheader("Plot R-C Difference")
-    # x_p = st.number_input("Select Measurement Number", min_value=1, max_value=len(difference_data), value=1, step=1)
-    # Plot the amplitude spectrum
-    hz = st.selectbox(
-        "Which frequency (in Hz) do you want to analyze?",
-        ("200", "500", "1000", "2000"))
+        st.subheader("Rarefaction Data")
+        st.dataframe(rarefaction_data)
 
-    if hz == "200":
-        x_p = 1
-    if hz == "500":
-        x_p = 2
-    if hz == "1000":
-        x_p = 3
-    if hz == "2000":
-        x_p = 4
+        st.subheader("Sum Data")
+        st.dataframe(sum_data)
 
-    df = difference_data.loc[difference_data['Measurement Number'] == x_p]
-    df = df.astype("float")
-    df = df.dropna()
+        st.subheader("Difference Data")
+        st.dataframe(difference_data)
 
-    # Plot the selected measurement
-    time = df['Time(us)'] * 100
-    voltage = df['Sample(uV)']
+        # Select a measurement number
+        st.subheader("Plot R-C Difference")
+        # x_p = st.number_input("Select Measurement Number", min_value=1, max_value=len(difference_data), value=1, step=1)
+        # Plot the amplitude spectrum
+        hz = st.selectbox(
+            "Which frequency (in Hz) do you want to analyze?",
+            ("200", "500", "1000", "2000"))
 
-    plt.figure(figsize=(10, 6))
-    plt.title(f"R-C Difference Plotted for Measurement Number {x_p}")
-    plt.xlabel('Time (us)')
-    plt.ylabel("Sample (uV)")
-    plt.plot(time, voltage)
-    st.pyplot(plt)
+        if hz == "200":
+            x_p = 1
+        if hz == "500":
+            x_p = 2
+        if hz == "1000":
+            x_p = 3
+        if hz == "2000":
+            x_p = 4
 
-    # Export Voltage to Excel
-    st.subheader("Export Data")
-    export_df = pd.DataFrame(voltage)
-    export_filename = st.text_input("Export Voltage Data as Excel Filename", value='voltage.xlsx')
-    if st.button("Export Voltage Data"):
-        export_df.to_excel(export_filename, index=False)
-        st.success(f"Data exported successfully to {export_filename}")
+        df = difference_data.loc[difference_data['Measurement Number'] == x_p]
+        df = df.astype("float")
+        df = df.dropna()
 
-    # Fast Fourier Transformation
-    st.subheader("Fast Fourier Transformation")
-    differencefft250 = voltage
+        # Plot the selected measurement
+        time = df['Time(us)'] * 100
+        voltage = df['Sample(uV)']
 
-    # Sampling frequency
-    Fs250 = 20900  # Hz
+        plt.figure(figsize=(10, 6))
+        plt.title(f"R-C Difference Plotted for Measurement Number {x_p}")
+        plt.xlabel('Time (us)')
+        plt.ylabel("Sample (uV)")
+        plt.plot(time, voltage)
+        st.pyplot(plt)
 
-    # Signal length
-    L250 = len(differencefft250)
+        # Export Voltage to Excel
+        st.subheader("Export Data")
+        export_df = pd.DataFrame(voltage)
+        export_filename = st.text_input("Export Voltage Data as Excel Filename", value='voltage.xlsx')
+        if st.button("Export Voltage Data"):
+            export_df.to_excel(export_filename, index=False)
+            st.success(f"Data exported successfully to {export_filename}")
 
-    # Zero-padding length
-    NFFT250 = 2**(int(np.ceil(np.log2(L250))) + 2)
+        # Fast Fourier Transformation
+        st.subheader("Fast Fourier Transformation")
+        differencefft250 = voltage
 
-    # Compute the FFT and normalize
-    Y250 = np.fft.fft(differencefft250, NFFT250) / L250
+        # Sampling frequency
+        Fs250 = 20900  # Hz
 
-    # Frequency vector
-    f250 = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
+        # Signal length
+        L250 = len(differencefft250)
 
-    # Convert array to DataFrame
-    amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
-    amplitude_df = pd.DataFrame(amplitude)
+        # Zero-padding length
+        NFFT250 = 2**(int(np.ceil(np.log2(L250))) + 2)
 
-    # Export Amplitude to Excel
-    export_amp_filename = st.text_input("Export Amplitude Data as Excel Filename", value='amplitude_500.xlsx')
-    if st.button("Export Amplitude Data"):
-        amplitude_df.to_excel(export_amp_filename, index=False)
-        st.success(f"Data exported successfully to {export_amp_filename}")
+        # Compute the FFT and normalize
+        Y250 = np.fft.fft(differencefft250, NFFT250) / L250
+
+        # Frequency vector
+        f250 = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
+
+        # Convert array to DataFrame
+        amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
+        amplitude_df = pd.DataFrame(amplitude)
+
+        # Export Amplitude to Excel
+        export_amp_filename = st.text_input("Export Amplitude Data as Excel Filename", value='amplitude_500.xlsx')
+        if st.button("Export Amplitude Data"):
+            amplitude_df.to_excel(export_amp_filename, index=False)
+            st.success(f"Data exported successfully to {export_amp_filename}")
+
+        harmonic_sum, fundamental_index = sum_harmonics_by_peak(amplitude)
+
+        # Get the frequencies corresponding to the harmonics
+        fundamental_freq = f250[fundamental_index]  # First harmonic frequency
+        second_harmonic_freq = f250[2 * fundamental_index] if 2 * fundamental_index < len(f250) else None
+        third_harmonic_freq = f250[3 * fundamental_index] if 3 * fundamental_index < len(f250) else None
+
+        # Plot the FFT data with harmonic lines
+        plt.figure(figsize=(10, 6))
+        plt.plot(f250, amplitude, linewidth=1.0)
+        plt.xlim([0, 9000])
+        plt.title(f'Fast Fourier Transformation {hz} Hz of Difference')
+        plt.xlabel('Frequency (Hz)')
+        plt.ylabel('Amplitude (microvolts)')
+
+        plt.plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
+                 label=f'1st Harmonic: {fundamental_freq:.2f} Hz')
+        if second_harmonic_freq:
+            plt.plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*', markersize=10,
+                     label=f'2nd Harmonic: {second_harmonic_freq:.2f} Hz')
+        if third_harmonic_freq:
+            plt.plot(third_harmonic_freq, amplitude[3 * fundamental_index], 'b*', markersize=10,
+                     label=f'3rd Harmonic: {third_harmonic_freq:.2f} Hz')
+
+        # Show legend
+        plt.legend()
+
+        # Display the plot in Streamlit
+        st.pyplot(plt)
+
+        # Display the result of harmonic sum
+        st.write(f"Fundamental Frequency: {f250[fundamental_index]} Hz")
+        st.write(f"Sum of first three harmonics: {harmonic_sum}")
+
+        #TODO: Sum together thre
 
 
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(f250, amplitude, linewidth=1.0)
-    plt.xlim([0, 9000])
-    plt.title(f'Fast Fourier Transformation {hz} Hz of Difference')
-    plt.xlabel('Frequency (Hz)')
-    plt.ylabel('Amplitude (microvolts)')
-    st.pyplot(plt)
+
+
+
+else:
+    if uploaded_file is not None:
+        st.write("Full Insertion")
+
+
+
+
+
