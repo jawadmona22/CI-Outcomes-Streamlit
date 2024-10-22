@@ -55,8 +55,9 @@ def extract_data(df, trace_type):
 
     dfX = pd.DataFrame(dfX)
     dfY = pd.DataFrame(dfY)
-
     result_df = pd.merge(dfX, dfY, left_index=True, right_index=True)
+    print(result_df.head())
+
     result_df = result_df.rename(columns={"0_x": "Time(us)", "0_y": "Sample(uV)"})
     result_df = result_df.reset_index()
     result_df = result_df.drop(columns=['level_1'])
@@ -78,6 +79,10 @@ def parse_xml(uploaded_file):
             B = {}
             for i in list(subelem):
                 B.update({i.tag: i.text})
+
+            # Extract the Recording Active Electrode from the Measurements
+
+            print(f'Contents of B: {B}')
             A.append(B)
 
     ECochG_Series = pd.DataFrame(A)
@@ -139,191 +144,170 @@ st.title("XML Data Analysis with Streamlit")
 # Upload XML file
 uploaded_file_list = st.file_uploader("Choose your XML file(s)", type="xml",accept_multiple_files=True)
 type = st.selectbox("Analysis Type",["Full Insertion","Round Window"])
+mode = type = st.selectbox("Mode",["Annotate","Review"])
 
-if len(uploaded_file_list) > 0:
 
-    # Select a measurement number
-    st.subheader("Individual File Analysis")
-    if (type == "Round Window"):
-        condensation_data,rarefaction_data,sum_data,difference_data = parse_xml(uploaded_file_list[0])
 
-        list_xp = [1,2,3,4]
-        list_hz = ["200","500","1000","2000"]
+if (mode == "Annotate"):
+    if len(uploaded_file_list) > 0:
+        # Select a measurement number
+        st.subheader("Individual File Analysis")
+        if (type == "Round Window"):
+            condensation_data,rarefaction_data,sum_data,difference_data = parse_xml(uploaded_file_list[0])
+            list_xp = [1,2,3,4]
+            list_hz = ["200","500","1000","2000"]
 
-        # Create a single figure with 4 subplots
-        fig, axs = plt.subplots(2,2, figsize=(10, 20))
-        axs = axs.flatten()
+            # Create a single figure with 4 subplots
+            fig, axs = plt.subplots(2,2, figsize=(10, 20))
+            axs = axs.flatten()
 
-        dif_fig, dif_axs = plt.subplots(2,2,figsize=(10,20))
-        dif_axs = dif_axs.flatten()
-        # fig.tight_layout(pad=4.0)
-        harmonic_data = []
-        for index, x_p in enumerate(list_xp):
-            hz = list_hz[index]
-            df = difference_data.loc[difference_data['Measurement Number'] == x_p]
-            df = df.astype("float")
-            df = df.dropna()
+            dif_fig, dif_axs = plt.subplots(2,2,figsize=(10,20))
+            dif_axs = dif_axs.flatten()
+            # fig.tight_layout(pad=4.0)
+            harmonic_data = []
+            for index, x_p in enumerate(list_xp):
+                hz = list_hz[index]
+                df = difference_data.loc[difference_data['Measurement Number'] == x_p]
+                df = df.astype("float")
+                df = df.dropna()
 
-            # Extract time and voltage
-            time = df['Time(us)'] * 100
-            voltage = df['Sample(uV)']
-            # Fast Fourier Transformation
-            # st.subheader(f"Fast Fourier Transformation for Measurement {x_p} ({hz} Hz)")
-            differencefft250 = voltage
+                # Extract time and voltage
+                time = df['Time(us)'] * 100
+                voltage = df['Sample(uV)']
+                # Fast Fourier Transformation
+                # st.subheader(f"Fast Fourier Transformation for Measurement {x_p} ({hz} Hz)")
+                differencefft250 = voltage
 
-            #Plot the selected measurement (if you need this plot separately, otherwise remove it)
-            # .figure(figsize=(10, 6))
-            dif_axs[index].set_title(f"R-C Difference \n  {hz} Hz")
-            dif_axs[index].set_xlabel('Time (us)')
-            dif_axs[index].set_ylabel("Sample (uV)")
-            dif_axs[index].plot(time, voltage)
+                #Plot the selected measurement (if you need this plot separately, otherwise remove it)
+                # .figure(figsize=(10, 6))
+                dif_axs[index].set_title(f"R-C Difference \n  {hz} Hz")
+                dif_axs[index].set_xlabel('Time (us)')
+                dif_axs[index].set_ylabel("Sample (uV)")
+                dif_axs[index].plot(time, voltage)
 
-            # Sampling frequency
-            Fs250 = 20900  # Hz
+                # Sampling frequency
+                Fs250 = 20900  # Hz
 
-            # Signal length
-            L250 = len(differencefft250)
+                # Signal length
+                L250 = len(differencefft250)
 
-            # Zero-padding length
-            NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 2)
+                # Zero-padding length
+                NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 2)
 
-            # Compute the FFT and normalize
-            Y250 = np.fft.fft(differencefft250, NFFT250) / L250
+                # Compute the FFT and normalize
+                Y250 = np.fft.fft(differencefft250, NFFT250) / L250
 
-            # Frequency vector
-            f250 = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
+                # Frequency vector
+                f250 = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
 
-            # Amplitude
-            amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
+                # Amplitude
+                amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
-            # Find harmonics
-            harmonic_sum, fundamental_index = sum_harmonics_by_peak(amplitude)
+                # Find harmonics
+                harmonic_sum, fundamental_index = sum_harmonics_by_peak(amplitude)
 
-            # Get the frequencies and amplitudes corresponding to the harmonics
-            fundamental_freq = f250[fundamental_index]  # First harmonic frequency
-            fundamental_amp = amplitude[fundamental_index]  # Amplitude at the first harmonic
+                # Get the frequencies and amplitudes corresponding to the harmonics
+                fundamental_freq = f250[fundamental_index]  # First harmonic frequency
+                fundamental_amp = amplitude[fundamental_index]  # Amplitude at the first harmonic
 
-            second_harmonic_freq = f250[2 * fundamental_index] if 2 * fundamental_index < len(f250) else None
-            second_harmonic_amp = amplitude[2 * fundamental_index] if 2 * fundamental_index < len(amplitude) else 0
+                second_harmonic_freq = f250[2 * fundamental_index] if 2 * fundamental_index < len(f250) else None
+                second_harmonic_amp = amplitude[2 * fundamental_index] if 2 * fundamental_index < len(amplitude) else 0
 
-            third_harmonic_freq = f250[3 * fundamental_index] if 3 * fundamental_index < len(f250) else None
-            third_harmonic_amp = amplitude[3 * fundamental_index] if 3 * fundamental_index < len(amplitude) else 0
+                third_harmonic_freq = f250[3 * fundamental_index] if 3 * fundamental_index < len(f250) else None
+                third_harmonic_amp = amplitude[3 * fundamental_index] if 3 * fundamental_index < len(amplitude) else 0
 
-            # Sum of the harmonics
-            total_amp = fundamental_amp + second_harmonic_amp + third_harmonic_amp
+                # Sum of the harmonics
+                total_amp = fundamental_amp + second_harmonic_amp + third_harmonic_amp
 
-            # Append the data for this measurement to the list
-            harmonic_data.append({
-                'Measurement Number': x_p,
-                'Fundamental Frequency (Hz)': fundamental_freq,
-                'Fundamental Amplitude': fundamental_amp,
-                'Second Harmonic Frequency (Hz)': second_harmonic_freq,
-                'Second Harmonic Amplitude': second_harmonic_amp,
-                'Third Harmonic Frequency (Hz)': third_harmonic_freq,
-                'Third Harmonic Amplitude': third_harmonic_amp,
-                'Total Amplitude': total_amp
-            })
+                # Append the data for this measurement to the list
+                harmonic_data.append({
+                    'Measurement Number': x_p,
+                    'Fundamental Frequency (Hz)': fundamental_freq,
+                    'Fundamental Amplitude': fundamental_amp,
+                    'Second Harmonic Frequency (Hz)': second_harmonic_freq,
+                    'Second Harmonic Amplitude': second_harmonic_amp,
+                    'Third Harmonic Frequency (Hz)': third_harmonic_freq,
+                    'Third Harmonic Amplitude': third_harmonic_amp,
+                    'Total Amplitude': total_amp
+                })
 
-            # Plot the FFT data with harmonic lines in the respective subplot
-            axs[index].plot(f250, amplitude, linewidth=1.0)
-            axs[index].set_xlim([0, 9000])
-            axs[index].set_title(f'FFT {hz} Hz of Difference')
-            axs[index].set_xlabel('Frequency (Hz)')
-            axs[index].set_ylabel('Amplitude (microvolts)')
+                # Plot the FFT data with harmonic lines in the respective subplot
+                axs[index].plot(f250, amplitude, linewidth=1.0)
+                axs[index].set_xlim([0, 9000])
+                axs[index].set_title(f'FFT {hz} Hz of Difference')
+                axs[index].set_xlabel('Frequency (Hz)')
+                axs[index].set_ylabel('Amplitude (microvolts)')
 
-            axs[index].plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
-                            label=f'1st Harmonic: {fundamental_freq:.2f} Hz')
-            if second_harmonic_freq:
-                axs[index].plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*', markersize=10,
-                                label=f'2nd Harmonic: {second_harmonic_freq:.2f} Hz')
-            if third_harmonic_freq:
-                axs[index].plot(third_harmonic_freq, amplitude[3 * fundamental_index], 'b*', markersize=10,
-                                label=f'3rd Harmonic: {third_harmonic_freq:.2f} Hz')
+                axs[index].plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
+                                label=f'1st Harmonic: {fundamental_freq:.2f} Hz')
+                if second_harmonic_freq:
+                    axs[index].plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*', markersize=10,
+                                    label=f'2nd Harmonic: {second_harmonic_freq:.2f} Hz')
+                if third_harmonic_freq:
+                    axs[index].plot(third_harmonic_freq, amplitude[3 * fundamental_index], 'b*', markersize=10,
+                                    label=f'3rd Harmonic: {third_harmonic_freq:.2f} Hz')
 
-            # Show legend for each subplot
-            axs[index].legend()
+                # Show legend for each subplot
+                axs[index].legend()
 
-        # After the loop, create the DataFrame from the list of harmonic data
+            # After the loop, create the DataFrame from the list of harmonic data
 
-        # Display the DataFrame in Streamlit
+            # Display the DataFrame in Streamlit
 
-        st.pyplot(dif_fig)
-        st.subheader("Fourier Transform and Total Response")
-        harmonic_df = pd.DataFrame(harmonic_data)
-        total_response = sum(harmonic_df["Total Amplitude"])
-        db_response = control.mag2db(total_response)
-        # st.write(f"Total Response:  \n  {total_response} microvolts   \n   {db_response} dB")
-        st.write(harmonic_df)
-        st.pyplot(fig)
-    else:
-        
-            st.write("Full Insertion")
+            st.pyplot(dif_fig)
+            st.subheader("Fourier Transform and Total Response")
+            harmonic_df = pd.DataFrame(harmonic_data)
+            total_response = sum(harmonic_df["Total Amplitude"])
+            db_response = control.mag2db(total_response)
+            # st.write(f"Total Response:  \n  {total_response} microvolts   \n   {db_response} dB")
+            st.write(harmonic_df)
+            st.pyplot(fig)
+        else:
             harmonics_df_dict = {}
             for uploaded_file in uploaded_file_list:
                 with st.expander(f"File: {uploaded_file.name}"):
-                    condensation_data,rarefaction_data,sum_data,difference_data = parse_xml(uploaded_file)
-                    list_xp = [1, 2, 3, 4,5,6,7,8,9,10,11,12]
-                    # Create a single figure with 4 subplots
-                    fig, axs = plt.subplots(6, 2, figsize=(10, 20))
-                    fig.tight_layout(pad=4.0)
-                    axs = axs.flatten()
-
-                    dif_fig, dif_axs = plt.subplots(6, 2, figsize=(10, 20))
-                    dif_fig.tight_layout(pad=4.0)
-                    dif_axs = dif_axs.flatten()
-                    # fig.tight_layout(pad=4.0)
+                    condensation_data, rarefaction_data, sum_data, difference_data = parse_xml(uploaded_file)
+                    list_xp = range(1, 13)  # Measurement numbers from 1 to 12
                     harmonic_data = []
+
+                    # Create a single figure for R-C and FFT graphs
                     for index, x_p in enumerate(list_xp):
-                        df = difference_data.loc[difference_data['Measurement Number'] == x_p]
-                        df = df.astype("float")
-                        df = df.dropna()
+                        df = difference_data.loc[difference_data['Measurement Number'] == x_p].astype(
+                            "float").dropna()
 
                         # Extract time and voltage
                         time = df['Time(us)'] * 100
                         voltage = df['Sample(uV)']
+
+                        # Create columns for side-by-side plots
+                        col1, col2 = st.columns(2)
+
+                        with col1:
+                            # Plot R-C Difference
+                            st.subheader(f"R-C Difference Measurement {x_p}")
+                            st.line_chart(data=pd.DataFrame({'Time (us)': time, 'Sample (uV)': voltage}).set_index(
+                                'Time (us)'))
+
                         # Fast Fourier Transformation
-                        # st.subheader(f"Fast Fourier Transformation for Measurement {x_p} ({hz} Hz)")
-                        differencefft250 = voltage
-
-                        # Plot the selected measurement (if you need this plot separately, otherwise remove it)
-                        # .figure(figsize=(10, 6))
-                        dif_axs[index].set_title(f"R-C Difference \n  Measurement {x_p}")
-                        dif_axs[index].set_xlabel('Time (us)')
-                        dif_axs[index].set_ylabel("Sample (uV)")
-                        dif_axs[index].plot(time, voltage)
-
-                        # Sampling frequency
                         Fs250 = 20900  # Hz
-
-                        # Signal length
-                        L250 = len(differencefft250)
-
-                        # Zero-padding length
+                        L250 = len(voltage)
                         NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 2)
-
-                        # Compute the FFT and normalize
-                        Y250 = np.fft.fft(differencefft250, NFFT250) / L250
-
-                        # Frequency vector
+                        Y250 = np.fft.fft(voltage, NFFT250) / L250
                         f250 = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
-
-                        # Amplitude
                         amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
                         # Find harmonics
                         harmonic_sum, fundamental_index = sum_harmonics_by_peak(amplitude)
-
-                        # Get the frequencies and amplitudes corresponding to the harmonics
-                        fundamental_freq = f250[fundamental_index]  # First harmonic frequency
-                        fundamental_amp = amplitude[fundamental_index]  # Amplitude at the first harmonic
-
-                        second_harmonic_freq = f250[2 * fundamental_index] if 2 * fundamental_index < len(f250) else None
-                        second_harmonic_amp = amplitude[2 * fundamental_index] if 2 * fundamental_index < len(amplitude) else 0
-
-                        third_harmonic_freq = f250[3 * fundamental_index] if 3 * fundamental_index < len(f250) else None
-                        third_harmonic_amp = amplitude[3 * fundamental_index] if 3 * fundamental_index < len(amplitude) else 0
-
-                        # Sum of the harmonics
+                        fundamental_freq = f250[fundamental_index]
+                        fundamental_amp = amplitude[fundamental_index]
+                        second_harmonic_freq = f250[2 * fundamental_index] if 2 * fundamental_index < len(
+                            f250) else None
+                        second_harmonic_amp = amplitude[2 * fundamental_index] if 2 * fundamental_index < len(
+                            amplitude) else 0
+                        third_harmonic_freq = f250[3 * fundamental_index] if 3 * fundamental_index < len(
+                            f250) else None
+                        third_harmonic_amp = amplitude[3 * fundamental_index] if 3 * fundamental_index < len(
+                            amplitude) else 0
                         total_amp = fundamental_amp + second_harmonic_amp + third_harmonic_amp
 
                         # Append the data for this measurement to the list
@@ -338,53 +322,47 @@ if len(uploaded_file_list) > 0:
                             'Total Amplitude': total_amp
                         })
 
-                        # Plot the FFT data with harmonic lines in the respective subplot
-                        axs[index].plot(f250, amplitude, linewidth=1.0)
-                        axs[index].set_xlim([0, 9000])
-                        axs[index].set_title(f'FFT Measurements {x_p}')
-                        axs[index].set_xlabel('Frequency (Hz)')
-                        axs[index].set_ylabel('Amplitude (microvolts)')
-
-                        axs[index].plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
+                        with col2:
+                            # Plot FFT
+                            st.subheader(f'FFT Measurement {x_p}')
+                            fig_fft, ax_fft = plt.subplots()
+                            ax_fft.plot(f250, amplitude, linewidth=1.0)
+                            ax_fft.set_xlim([0, 9000])
+                            ax_fft.set_title(f'FFT Measurements {x_p}')
+                            ax_fft.set_xlabel('Frequency (Hz)')
+                            ax_fft.set_ylabel('Amplitude (microvolts)')
+                            ax_fft.plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
                                         label=f'1st Harmonic: {fundamental_freq:.2f} Hz')
-                        if second_harmonic_freq:
-                            axs[index].plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*', markersize=10,
+                            if second_harmonic_freq:
+                                ax_fft.plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*',
+                                            markersize=10,
                                             label=f'2nd Harmonic: {second_harmonic_freq:.2f} Hz')
-                        if third_harmonic_freq:
-                            axs[index].plot(third_harmonic_freq, amplitude[3 * fundamental_index], 'b*', markersize=10,
+                            if third_harmonic_freq:
+                                ax_fft.plot(third_harmonic_freq, amplitude[3 * fundamental_index], 'b*',
+                                            markersize=10,
                                             label=f'3rd Harmonic: {third_harmonic_freq:.2f} Hz')
+                            ax_fft.legend()
+                            st.pyplot(fig_fft)
 
-                        # Show legend for each subplot
-                        axs[index].legend()
-
-
-                    # Display the DataFrame in Streamlit
-
-                    st.pyplot(dif_fig)
-                    st.subheader("Fourier Transform and Total Response")
+                    # Create a DataFrame from harmonic data and display it
                     harmonic_df = pd.DataFrame(harmonic_data)
-                    total_response = sum(harmonic_df["Total Amplitude"])
-                    db_response = control.mag2db(total_response)
-                    st.write(f"Total Response:  \n  {total_response} microvolts   \n   {db_response} dB")
+                    st.subheader("Harmonic Data")
                     st.write(harmonic_df)
-                    st.pyplot(fig)
-                    
+
                     harmonics_df_dict[uploaded_file.name] = harmonic_df
 
-            st.write("Best Frequency Total Response")
-            max_amplitude_dict = {}
-            for key, value in harmonics_df_dict.items():
-                temp_amp = extract_max_amplitude(value)
-                max_amplitude_dict[key] = temp_amp
+            # Optionally summarize best frequency total response
+            st.subheader("Best Frequency Total Response")
+            max_amplitude_dict = {key: extract_max_amplitude(value) for key, value in harmonics_df_dict.items()}
             st.write(max_amplitude_dict)
-               
+
 
 
 
 
             if st.button('True Response', key='b1'):
                 st.write("File recorded!")
-                
+
             if st.button('Invalid Response', key='b2'):
                 st.write("File recorded!")
 
@@ -392,6 +370,7 @@ if len(uploaded_file_list) > 0:
             ChangeButtonColour('Invalid Response', 'white', 'red') # button txt to find, colour to assign
 
 
-
+else:
+    st.write("Review mode selected")
 
 
