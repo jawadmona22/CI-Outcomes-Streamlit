@@ -425,7 +425,18 @@ if (mode == "Annotate"):
             # Optionally summarize best frequency total response
             st.subheader("Best Frequency Total Response")
             max_amplitude_dict = {key: extract_max_amplitude(value) for key, value in harmonics_df_dict.items()}
-            st.write(max_amplitude_dict)
+            data = []
+            for filename, values in max_amplitude_dict.items():
+                response = values[0]  # First value is the response
+                electrode = values[1]  # Second value is the electrode
+                data.append({"Filename": filename, "Response": response, "Electrode": electrode})
+
+            # Create a DataFrame
+            df = pd.DataFrame(data)
+
+            # Display the DataFrame in Streamlit
+            st.write("Max Amplitude Table")
+            st.table(df)
 
 
 
