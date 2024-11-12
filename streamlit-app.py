@@ -9,6 +9,11 @@ import streamlit.components.v1 as components
 
 
 
+def find_nearest_idx(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx
+
 def ChangeButtonColour(widget_label, font_color, background_color='transparent'):
     htmlstr = f"""
         <script>
@@ -24,8 +29,40 @@ def ChangeButtonColour(widget_label, font_color, background_color='transparent')
     components.html(f"{htmlstr}", height=0, width=0)
 
 
-def sum_harmonics_by_peak(fft_data):
-    # Take the magnitude of the FFT data (ignore the complex part)
+def noise_floor_calculation(first_harmonic_freq, freq_array, amplitude_array):
+    bin_width = 62  # Each bin is 62 Hz wide
+    num_bins = 3
+
+    start_freq = (9 * bin_width) + first_harmonic_freq
+    start_idx = find_nearest_idx(freq_array, start_freq)
+
+    bin_means = []
+
+    # Calculate means for each 62 Hz bin
+    for i in range(num_bins):
+        # Determine the start and end frequencies for each bin
+        bin_start_freq = start_freq + (i * bin_width)
+        bin_end_freq = bin_start_freq + bin_width
+
+        # Find the start and end indices for each bin
+        bin_start_idx = find_nearest_idx(freq_array, bin_start_freq)
+        bin_end_idx = find_nearest_idx(freq_array, bin_end_freq)
+
+        # Calculate the mean amplitude for this bin
+        bin_mean = np.mean(amplitude_array[bin_start_idx:bin_end_idx + 1])
+        bin_means.append(bin_mean)
+
+    # Calculate variance and standard deviation of the bin means
+    variance = np.var(bin_means)
+    std_deviation = np.sqrt(variance)
+    threshold = 3*std_deviation
+
+    return threshold
+
+
+
+def sum_harmonics_by_peak(fft_data,freq_vector):
+    # Take the magnitude of the FFT data
     magnitude = np.abs(fft_data)
 
     # Find the index of the highest peak (ignoring the DC component at index 0)
@@ -45,7 +82,10 @@ def sum_harmonics_by_peak(fft_data):
     # Sum of the first, second, and third harmonics
     harmonic_sum = first_harmonic + second_harmonic + third_harmonic
 
-    return harmonic_sum, fundamental_index
+    #Find the noise floor
+    threshold = noise_floor_calculation(first_harmonic_freq=first_harmonic,freq_array=freq_vector,amplitude_array=magnitude)
+
+    return harmonic_sum, fundamental_index, threshold
     
 def extract_data(df, trace_type):
     df1 = df['Y'].str.split(" ", expand=True)
@@ -54,12 +94,14 @@ def extract_data(df, trace_type):
     dfX = df2.T.unstack()
 
     dfX = pd.DataFrame(dfX)
+
     dfY = pd.DataFrame(dfY)
+
     result_df = pd.merge(dfX, dfY, left_index=True, right_index=True)
-    print(result_df.head())
 
     result_df = result_df.rename(columns={"0_x": "Time(us)", "0_y": "Sample(uV)"})
     result_df = result_df.reset_index()
+
     result_df = result_df.drop(columns=['level_1'])
     result_df = result_df.rename(columns={"level_0": "Measurement Number"})
     result_df['Measurement Number'] = result_df['Measurement Number'] + 1
@@ -82,13 +124,18 @@ def parse_xml(uploaded_file):
 
             # Extract the Recording Active Electrode from the Measurements
 
-            print(f'Contents of B: {B}')
+            # print(f'Contents of B: {B}')
             A.append(B)
 
     ECochG_Series = pd.DataFrame(A)
-    ECochG_Series.drop_duplicates(keep='first', inplace=True)
+    ECochG_Series.drop_duplicates(keep='last', inplace=True)
     ECochG_Series.reset_index(drop=True, inplace=True)
     ECochG_Series.index = ECochG_Series.index + 1
+    ECochG_Series['Measurement Number'] = ECochG_Series.index
+
+    # Display columns for verification
+    # recording_electrode = ECochG_Series.loc[ECochG_Series['RecordingActiveElectrode'] == 'ICE20', 'Measurement Number'].values
+    # print(f"Example Recording Electrode: {recording_electrode}")
 
     st.subheader("ECochG Series Dataframe")
     st.dataframe(ECochG_Series)
@@ -127,15 +174,19 @@ def parse_xml(uploaded_file):
     rarefaction_data = extract_data(rarefaction, 'RAREFACTION')
     sum_data = extract_data(Sum, 'SUM')
     difference_data = extract_data(difference, 'DIFFERENCE')
-    return condensation_data,rarefaction_data,sum_data,difference_data
+    return condensation_data,rarefaction_data,sum_data,difference_data,ECochG_Series
 
 def extract_max_amplitude(dataframe):
     highest = 0
+    electrode = 0
+    print(dataframe.head())
     for item in dataframe["Total Amplitude"]:
         if item > highest:
             highest = item
-            
-    return highest
+            recording_electrode = dataframe.loc[dataframe['Total Amplitude'] == highest, 'Recording Electrode'].values
+
+
+    return highest, recording_electrode
 
 
 # Streamlit app title
@@ -153,7 +204,7 @@ if (mode == "Annotate"):
         # Select a measurement number
         st.subheader("Individual File Analysis")
         if (type == "Round Window"):
-            condensation_data,rarefaction_data,sum_data,difference_data = parse_xml(uploaded_file_list[0])
+            condensation_data,rarefaction_data,sum_data,difference_data,ECochG_series = parse_xml(uploaded_file_list[0])
             list_xp = [1,2,3,4]
             list_hz = ["200","500","1000","2000"]
 
@@ -168,6 +219,8 @@ if (mode == "Annotate"):
             for index, x_p in enumerate(list_xp):
                 hz = list_hz[index]
                 df = difference_data.loc[difference_data['Measurement Number'] == x_p]
+                recording_electrode = ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p, 'RecordingActiveElectrode'].values
+
                 df = df.astype("float")
                 df = df.dropna()
 
@@ -198,22 +251,21 @@ if (mode == "Annotate"):
                 Y250 = np.fft.fft(differencefft250, NFFT250) / L250
 
                 # Frequency vector
-                f250 = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
-
+                freq_array = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
                 # Amplitude
                 amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
                 # Find harmonics
-                harmonic_sum, fundamental_index = sum_harmonics_by_peak(amplitude)
+                harmonic_sum, fundamental_index, threshold = sum_harmonics_by_peak(amplitude)
 
                 # Get the frequencies and amplitudes corresponding to the harmonics
-                fundamental_freq = f250[fundamental_index]  # First harmonic frequency
+                fundamental_freq = freq_array[fundamental_index]  # First harmonic frequency
                 fundamental_amp = amplitude[fundamental_index]  # Amplitude at the first harmonic
 
-                second_harmonic_freq = f250[2 * fundamental_index] if 2 * fundamental_index < len(f250) else None
+                second_harmonic_freq = freq_array[2 * fundamental_index] if 2 * fundamental_index < len(freq_array) else None
                 second_harmonic_amp = amplitude[2 * fundamental_index] if 2 * fundamental_index < len(amplitude) else 0
 
-                third_harmonic_freq = f250[3 * fundamental_index] if 3 * fundamental_index < len(f250) else None
+                third_harmonic_freq = freq_array[3 * fundamental_index] if 3 * fundamental_index < len(freq_array) else None
                 third_harmonic_amp = amplitude[3 * fundamental_index] if 3 * fundamental_index < len(amplitude) else 0
 
                 # Sum of the harmonics
@@ -232,7 +284,7 @@ if (mode == "Annotate"):
                 })
 
                 # Plot the FFT data with harmonic lines in the respective subplot
-                axs[index].plot(f250, amplitude, linewidth=1.0)
+                axs[index].plot(freq_array, amplitude, linewidth=1.0)
                 axs[index].set_xlim([0, 9000])
                 axs[index].set_title(f'FFT {hz} Hz of Difference')
                 axs[index].set_xlabel('Frequency (Hz)')
@@ -263,17 +315,19 @@ if (mode == "Annotate"):
             st.write(harmonic_df)
             st.pyplot(fig)
         else:
-            harmonics_df_dict = {}
+            harmonics_df_dict = {} #setting up for BFTR calculation
             for uploaded_file in uploaded_file_list:
                 with st.expander(f"File: {uploaded_file.name}"):
-                    condensation_data, rarefaction_data, sum_data, difference_data = parse_xml(uploaded_file)
+                    condensation_data, rarefaction_data, sum_data, difference_data,ECochG_Series = parse_xml(uploaded_file)
                     list_xp = range(1, 13)  # Measurement numbers from 1 to 12
                     harmonic_data = []
-
+                    st.write("Difference Data")
+                    st.write(difference_data.head())
                     # Create a single figure for R-C and FFT graphs
                     for index, x_p in enumerate(list_xp):
                         df = difference_data.loc[difference_data['Measurement Number'] == x_p].astype(
                             "float").dropna()
+                        recording_electrode = ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p, 'RecordingActiveElectrode'].values[0]
 
                         # Extract time and voltage
                         time = df['Time(us)'] * 100
@@ -284,7 +338,7 @@ if (mode == "Annotate"):
 
                         with col1:
                             # Plot R-C Difference
-                            st.subheader(f"R-C Difference Measurement {x_p}")
+                            st.subheader(f"R-C Difference Electrode {recording_electrode}")
                             st.line_chart(data=pd.DataFrame({'Time (us)': time, 'Sample (uV)': voltage}).set_index(
                                 'Time (us)'))
 
@@ -293,26 +347,41 @@ if (mode == "Annotate"):
                         L250 = len(voltage)
                         NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 2)
                         Y250 = np.fft.fft(voltage, NFFT250) / L250
-                        f250 = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
+                        freq_array = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
                         amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
                         # Find harmonics
-                        harmonic_sum, fundamental_index = sum_harmonics_by_peak(amplitude)
-                        fundamental_freq = f250[fundamental_index]
-                        fundamental_amp = amplitude[fundamental_index]
-                        second_harmonic_freq = f250[2 * fundamental_index] if 2 * fundamental_index < len(
-                            f250) else None
-                        second_harmonic_amp = amplitude[2 * fundamental_index] if 2 * fundamental_index < len(
-                            amplitude) else 0
-                        third_harmonic_freq = f250[3 * fundamental_index] if 3 * fundamental_index < len(
-                            f250) else None
-                        third_harmonic_amp = amplitude[3 * fundamental_index] if 3 * fundamental_index < len(
-                            amplitude) else 0
+                        harmonic_sum, fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array)
+                        # print(f'Threshold: {threshold}')
+                        # Fundamental frequency and amplitude
+                        fundamental_freq = freq_array[fundamental_index]
+                        fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
+
+                        # Second harmonic frequency and amplitude
+                        second_harmonic_index = 2 * fundamental_index
+                        if second_harmonic_index < len(freq_array):
+                            second_harmonic_freq = freq_array[second_harmonic_index]
+                            second_harmonic_amp = amplitude[second_harmonic_index] if amplitude[second_harmonic_index] > threshold else 0
+                        else:
+                            second_harmonic_freq = None
+                            second_harmonic_amp = 0
+
+                        # Third harmonic frequency and amplitude
+                        third_harmonic_index = 3 * fundamental_index
+                        if third_harmonic_index < len(freq_array):
+                            third_harmonic_freq = freq_array[third_harmonic_index]
+                            third_harmonic_amp = amplitude[third_harmonic_index] if amplitude[third_harmonic_index] > threshold else 0
+                        else:
+                            third_harmonic_freq = None
+                            third_harmonic_amp = 0
+
+
                         total_amp = fundamental_amp + second_harmonic_amp + third_harmonic_amp
 
                         # Append the data for this measurement to the list
                         harmonic_data.append({
                             'Measurement Number': x_p,
+                            'Recording Electrode':recording_electrode,
                             'Fundamental Frequency (Hz)': fundamental_freq,
                             'Fundamental Amplitude': fundamental_amp,
                             'Second Harmonic Frequency (Hz)': second_harmonic_freq,
@@ -324,15 +393,17 @@ if (mode == "Annotate"):
 
                         with col2:
                             # Plot FFT
-                            st.subheader(f'FFT Measurement {x_p}')
+                            st.subheader(f'FFT Electrode {recording_electrode}')
                             fig_fft, ax_fft = plt.subplots()
-                            ax_fft.plot(f250, amplitude, linewidth=1.0)
+                            ax_fft.plot(freq_array, amplitude, linewidth=1.0)
                             ax_fft.set_xlim([0, 9000])
-                            ax_fft.set_title(f'FFT Measurements {x_p}')
+                            ax_fft.set_title(f'FFT Measurement {x_p}')
                             ax_fft.set_xlabel('Frequency (Hz)')
                             ax_fft.set_ylabel('Amplitude (microvolts)')
                             ax_fft.plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
                                         label=f'1st Harmonic: {fundamental_freq:.2f} Hz')
+
+                            #TODO: If the amplitude doesn't pass threshold, display on graph
                             if second_harmonic_freq:
                                 ax_fft.plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*',
                                             markersize=10,
@@ -359,12 +430,12 @@ if (mode == "Annotate"):
 
 
 
-
-            if st.button('True Response', key='b1'):
-                st.write("File recorded!")
-
-            if st.button('Invalid Response', key='b2'):
-                st.write("File recorded!")
+            #
+            # if st.button('True Response', key='b1'):
+            #     st.write("File recorded!")
+            #
+            # if st.button('Invalid Response', key='b2'):
+            #     st.write("File recorded!")
 
             ChangeButtonColour('True Response', 'white', 'green') # button txt to find, colour to assign
             ChangeButtonColour('Invalid Response', 'white', 'red') # button txt to find, colour to assign
