@@ -319,16 +319,22 @@ if (mode == "Annotate"):
             for uploaded_file in uploaded_file_list:
                 with st.expander(f"File: {uploaded_file.name}"):
                     condensation_data, rarefaction_data, sum_data, difference_data,ECochG_Series = parse_xml(uploaded_file)
-                    list_xp = range(1, 13)  # Measurement numbers from 1 to 12
+                    # Get unique measurement numbers from 'difference_data'
+                    unique_measurement_numbers = difference_data['Measurement Number'].unique()
+
                     harmonic_data = []
                     st.write("Difference Data")
                     st.write(difference_data.head())
-                    # Create a single figure for R-C and FFT graphs
-                    for index, x_p in enumerate(list_xp):
+
+                    # Loop through each unique measurement number
+                    for index, x_p in enumerate(unique_measurement_numbers):
                         df = difference_data.loc[difference_data['Measurement Number'] == x_p].astype(
                             "float").dropna()
-                        recording_electrode = ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p, 'RecordingActiveElectrode'].values[0]
-
+                        print(x_p)
+                        recording_electrode = ECochG_Series.loc[
+                            ECochG_Series['Measurement Number'] == x_p,
+                            'RecordingActiveElectrode'
+                        ].values[0]
                         # Extract time and voltage
                         time = df['Time(us)'] * 100
                         voltage = df['Sample(uV)']
