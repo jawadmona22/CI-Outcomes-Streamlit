@@ -194,16 +194,19 @@ st.title("XML Data Analysis with Streamlit")
 
 # Upload XML file
 uploaded_file_list = st.file_uploader("Choose your XML file(s)", type="xml",accept_multiple_files=True)
-type = st.selectbox("Analysis Type",["Full Insertion","Round Window"])
-mode = type = st.selectbox("Mode",["Annotate","Review"])
+# type = st.selectbox("Analysis Type",["Full Insertion","Round Window"])
+# mode = type = st.selectbox("Mode",["Annotate","Review"])
 
 
-
+type = "Full Insertion"
+mode = "Annotate"
 if (mode == "Annotate"):
     if len(uploaded_file_list) > 0:
         # Select a measurement number
         st.subheader("Individual File Analysis")
         if (type == "Round Window"):
+            st.write("Round window chosen")
+            print("round window")
             condensation_data,rarefaction_data,sum_data,difference_data,ECochG_series = parse_xml(uploaded_file_list[0])
             list_xp = [1,2,3,4]
             list_hz = ["200","500","1000","2000"]
