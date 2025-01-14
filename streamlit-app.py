@@ -64,6 +64,7 @@ def noise_floor_calculation(first_harmonic_freq, freq_array, amplitude_array):
 def sum_harmonics_by_peak(fft_data,freq_vector):
     # Take the magnitude of the FFT data
     magnitude = np.abs(fft_data)
+    #TODO: Create limit for where peaks are found based on file
 
     # Find the index of the highest peak (ignoring the DC component at index 0)
     fundamental_index = np.argmax(magnitude[1:]) + 1  # +1 to adjust for skipping index 0
