@@ -61,13 +61,17 @@ def noise_floor_calculation(first_harmonic_freq, freq_array, amplitude_array):
 
 
 
-def sum_harmonics_by_peak(fft_data,freq_vector):
+def sum_harmonics_by_peak(fft_data,freq_vector, limit):
     # Take the magnitude of the FFT data
-    magnitude = np.abs(fft_data)
     #TODO: Create limit for where peaks are found based on file
+    #Find cut-off index of limit (which is the frequency we are testing at, e.g 250 or 500 or 1000)
+    #Index isn't exact due to how freq_vector is formed
+    cutoff_index = np.argmin(np.abs(freq_vector - limit))
+    magnitude = np.abs(fft_data[cutoff_index:])
+
 
     # Find the index of the highest peak (ignoring the DC component at index 0)
-    fundamental_index = np.argmax(magnitude[1:]) + 1  # +1 to adjust for skipping index 0
+    fundamental_index = np.argmax(magnitude[1:]) + 1 + cutoff_index # +1 to adjust for skipping index 0, +cutoff index to account for that
 
     # First harmonic is at the fundamental frequency index (highest peak)
     first_harmonic = magnitude[fundamental_index]
@@ -133,6 +137,7 @@ def parse_xml(uploaded_file):
     ECochG_Series.reset_index(drop=True, inplace=True)
     ECochG_Series.index = ECochG_Series.index + 1
     ECochG_Series['Measurement Number'] = ECochG_Series.index
+    current_frequency = int(ECochG_Series['Frequency'][1][1:])
 
     # Display columns for verification
     # recording_electrode = ECochG_Series.loc[ECochG_Series['RecordingActiveElectrode'] == 'ICE20', 'Measurement Number'].values
@@ -175,7 +180,7 @@ def parse_xml(uploaded_file):
     rarefaction_data = extract_data(rarefaction, 'RAREFACTION')
     sum_data = extract_data(Sum, 'SUM')
     difference_data = extract_data(difference, 'DIFFERENCE')
-    return condensation_data,rarefaction_data,sum_data,difference_data,ECochG_Series
+    return condensation_data,rarefaction_data,sum_data,difference_data,ECochG_Series, current_frequency
 
 def extract_max_amplitude(dataframe):
     highest = 0
@@ -322,7 +327,7 @@ if (mode == "Annotate"):
             harmonics_df_dict = {} #setting up for BFTR calculation
             for uploaded_file in uploaded_file_list:
                 with st.expander(f"File: {uploaded_file.name}"):
-                    condensation_data, rarefaction_data, sum_data, difference_data,ECochG_Series = parse_xml(uploaded_file)
+                    condensation_data, rarefaction_data, sum_data, difference_data,ECochG_Series, current_frequency = parse_xml(uploaded_file)
                     # Get unique measurement numbers from 'difference_data'
                     unique_measurement_numbers = difference_data['Measurement Number'].unique()
 
@@ -360,8 +365,8 @@ if (mode == "Annotate"):
                         freq_array = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
                         amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
-                        # Find harmonics
-                        harmonic_sum, fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array)
+                        # Find harmonics after the limit of the file given
+                        harmonic_sum, fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,current_frequency)
                         # print(f'Threshold: {threshold}')
                         # Fundamental frequency and amplitude
                         fundamental_freq = freq_array[fundamental_index]
@@ -413,7 +418,6 @@ if (mode == "Annotate"):
                             ax_fft.plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
                                         label=f'1st Harmonic: {fundamental_freq:.2f} Hz')
 
-                            #TODO: If the amplitude doesn't pass threshold, display on graph
                             if second_harmonic_freq:
                                 ax_fft.plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*',
                                             markersize=10,
@@ -456,10 +460,10 @@ if (mode == "Annotate"):
             #     st.write("File recorded!")
             #
             # if st.button('Invalid Response', key='b2'):
-            #     st.write("File recorded!")
-
-            ChangeButtonColour('True Response', 'white', 'green') # button txt to find, colour to assign
-            ChangeButtonColour('Invalid Response', 'white', 'red') # button txt to find, colour to assign
+            # #     st.write("File recorded!")
+            #
+            # ChangeButtonColour('True Response', 'white', 'green') # button txt to find, colour to assign
+            # ChangeButtonColour('Invalid Response', 'white', 'red') # button txt to find, colour to assign
 
 
 else:
