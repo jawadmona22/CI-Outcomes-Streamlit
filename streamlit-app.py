@@ -64,6 +64,7 @@ def noise_floor_calculation(first_harmonic_freq, freq_array, amplitude_array):
 def sum_harmonics_by_peak(fft_data,freq_vector, limit):
     # Take the magnitude of the FFT data
     #TODO: Create limit for where peaks are found based on file
+    print(freq_vector)
     #Find cut-off index of limit (which is the frequency we are testing at, e.g 250 or 500 or 1000)
     #Index isn't exact due to how freq_vector is formed
     cutoff_index = np.argmin(np.abs(freq_vector - limit))
@@ -72,6 +73,9 @@ def sum_harmonics_by_peak(fft_data,freq_vector, limit):
 
     # Find the index of the highest peak (ignoring the DC component at index 0)
     fundamental_index = np.argmax(magnitude[1:]) + 1 + cutoff_index # +1 to adjust for skipping index 0, +cutoff index to account for that
+
+    if fundamental_index > cutoff_index: #prevent values above where we are looking
+        fundamental_index = cutoff_index
 
     # First harmonic is at the fundamental frequency index (highest peak)
     first_harmonic = magnitude[fundamental_index]
@@ -325,7 +329,9 @@ if (mode == "Annotate"):
             st.pyplot(fig)
         else:
             harmonics_df_dict = {} #setting up for BFTR calculation
+            file_index = 0
             for uploaded_file in uploaded_file_list:
+                file_index +=1
                 with st.expander(f"File: {uploaded_file.name}"):
                     condensation_data, rarefaction_data, sum_data, difference_data,ECochG_Series, current_frequency = parse_xml(uploaded_file)
                     # Get unique measurement numbers from 'difference_data'
