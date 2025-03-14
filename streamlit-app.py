@@ -64,7 +64,6 @@ def noise_floor_calculation(first_harmonic_freq, freq_array, amplitude_array):
 def sum_harmonics_by_peak(fft_data,freq_vector, limit):
     # Take the magnitude of the FFT data
     #TODO: Create limit for where peaks are found based on file
-    print(freq_vector)
     #Find cut-off index of limit (which is the frequency we are testing at, e.g 250 or 500 or 1000)
     #Index isn't exact due to how freq_vector is formed
     cutoff_index = np.argmin(np.abs(freq_vector - limit))
@@ -72,7 +71,7 @@ def sum_harmonics_by_peak(fft_data,freq_vector, limit):
 
 
     # Find the index of the highest peak (ignoring the DC component at index 0)
-    fundamental_index = np.argmax(magnitude[1:]) + 1 + cutoff_index # +1 to adjust for skipping index 0, +cutoff index to account for that
+    fundamental_index = np.argmax(fft_data[1:]) + 1 + cutoff_index # +1 to adjust for skipping index 0, +cutoff index to account for that
 
     if fundamental_index > cutoff_index: #prevent values above where we are looking
         fundamental_index = cutoff_index
@@ -142,7 +141,6 @@ def parse_xml(uploaded_file):
     ECochG_Series.index = ECochG_Series.index + 1
     ECochG_Series['Measurement Number'] = ECochG_Series.index
     current_frequency = int(ECochG_Series['Frequency'][1][1:])
-
     # Display columns for verification
     # recording_electrode = ECochG_Series.loc[ECochG_Series['RecordingActiveElectrode'] == 'ICE20', 'Measurement Number'].values
     # print(f"Example Recording Electrode: {recording_electrode}")
@@ -190,10 +188,13 @@ def extract_max_amplitude(dataframe):
     highest = 0
     electrode = 0
     print(dataframe.head())
-    for item in dataframe["Total Amplitude"]:
+    filtered_df = dataframe[dataframe["Include_In_BFTR"] == True]
+
+    for item in filtered_df["Total Amplitude"]:
+
         if item > highest:
             highest = item
-            recording_electrode = dataframe.loc[dataframe['Total Amplitude'] == highest, 'Recording Electrode'].values
+            recording_electrode = filtered_df.loc[filtered_df['Total Amplitude'] == highest, 'Recording Electrode'].values
 
 
     return highest, recording_electrode
@@ -244,8 +245,7 @@ if (mode == "Annotate"):
                 # st.subheader(f"Fast Fourier Transformation for Measurement {x_p} ({hz} Hz)")
                 differencefft250 = voltage
 
-                #Plot the selected measurement (if you need this plot separately, otherwise remove it)
-                # .figure(figsize=(10, 6))
+
                 dif_axs[index].set_title(f"R-C Difference \n  {hz} Hz")
                 dif_axs[index].set_xlabel('Time (us)')
                 dif_axs[index].set_ylabel("Sample (uV)")
@@ -336,20 +336,23 @@ if (mode == "Annotate"):
                     condensation_data, rarefaction_data, sum_data, difference_data,ECochG_Series, current_frequency = parse_xml(uploaded_file)
                     # Get unique measurement numbers from 'difference_data'
                     unique_measurement_numbers = difference_data['Measurement Number'].unique()
-
+                    print(f"UNIQUE MEASURE: {unique_measurement_numbers}")
                     harmonic_data = []
                     st.write("Difference Data")
                     st.write(difference_data.head())
-
                     # Loop through each unique measurement number
+                    seen_02 = False
                     for index, x_p in enumerate(unique_measurement_numbers):
                         df = difference_data.loc[difference_data['Measurement Number'] == x_p].astype(
                             "float").dropna()
-                        print(x_p)
                         recording_electrode = ECochG_Series.loc[
                             ECochG_Series['Measurement Number'] == x_p,
                             'RecordingActiveElectrode'
                         ].values[0]
+
+                        if recording_electrode == "ICE02":
+                            seen_02 = True
+
                         # Extract time and voltage
                         time = df['Time(us)'] * 100
                         voltage = df['Sample(uV)']
@@ -398,7 +401,10 @@ if (mode == "Annotate"):
 
 
                         total_amp = fundamental_amp + second_harmonic_amp + third_harmonic_amp
-
+                        if seen_02:
+                            include = False
+                        else:
+                            include = True
                         # Append the data for this measurement to the list
                         harmonic_data.append({
                             'Measurement Number': x_p,
@@ -409,7 +415,8 @@ if (mode == "Annotate"):
                             'Second Harmonic Amplitude': second_harmonic_amp,
                             'Third Harmonic Frequency (Hz)': third_harmonic_freq,
                             'Third Harmonic Amplitude': third_harmonic_amp,
-                            'Total Amplitude': total_amp
+                            'Total Amplitude': total_amp,
+                            'Include_In_BFTR':include
                         })
 
                         with col2:
