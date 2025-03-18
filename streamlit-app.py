@@ -457,6 +457,7 @@ if (mode == "Annotate"):
                     ax.set_title(f"Amplitude vs Electrode for {int(harmonic_df['Fundamental Frequency (Hz)'][0])} Hz")
                     ax.set_xlabel("Recording Electrode")
                     ax.set_ylabel("Amplitude (uV)")
+                    ax.set_xticklabels(harmonic_df["Recording Electrode"],rotation=45, ha="right")
                     st.pyplot(fig)
 
 
