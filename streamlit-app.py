@@ -327,6 +327,8 @@ if (mode == "Annotate"):
             # st.write(f"Total Response:  \n  {total_response} microvolts   \n   {db_response} dB")
             st.write(harmonic_df)
             st.pyplot(fig)
+
+
         else:
             harmonics_df_dict = {} #setting up for BFTR calculation
             file_index = 0
@@ -338,8 +340,8 @@ if (mode == "Annotate"):
                     unique_measurement_numbers = difference_data['Measurement Number'].unique()
                     print(f"UNIQUE MEASURE: {unique_measurement_numbers}")
                     harmonic_data = []
-                    st.write("Difference Data")
-                    st.write(difference_data.head())
+                    # st.write("Difference Data")
+                    # st.write(difference_data.head())
                     # Loop through each unique measurement number
                     seen_02 = False
                     for index, x_p in enumerate(unique_measurement_numbers):
@@ -349,6 +351,10 @@ if (mode == "Annotate"):
                             ECochG_Series['Measurement Number'] == x_p,
                             'RecordingActiveElectrode'
                         ].values[0]
+                        if seen_02:
+                            include = False
+                        else:
+                            include = True
 
                         if recording_electrode == "ICE02":
                             seen_02 = True
@@ -401,10 +407,7 @@ if (mode == "Annotate"):
 
 
                         total_amp = fundamental_amp + second_harmonic_amp + third_harmonic_amp
-                        if seen_02:
-                            include = False
-                        else:
-                            include = True
+
                         # Append the data for this measurement to the list
                         harmonic_data.append({
                             'Measurement Number': x_p,
@@ -449,7 +452,14 @@ if (mode == "Annotate"):
 
                     harmonics_df_dict[uploaded_file.name] = harmonic_df
 
-            # Optionally summarize best frequency total response
+                    fig, ax = plt.subplots()
+                    ax.plot(harmonic_df["Recording Electrode"], harmonic_df["Fundamental Amplitude"],'-o')
+                    ax.set_title(f"Amplitude vs Electrode for {int(harmonic_df['Fundamental Frequency (Hz)'][0])} Hz")
+                    ax.set_xlabel("Recording Electrode")
+                    ax.set_ylabel("Amplitude (uV)")
+                    st.pyplot(fig)
+
+
             st.subheader("Best Frequency Total Response")
             max_amplitude_dict = {key: extract_max_amplitude(value) for key, value in harmonics_df_dict.items()}
             data = []
@@ -464,6 +474,8 @@ if (mode == "Annotate"):
             # Display the DataFrame in Streamlit
             st.write("Max Amplitude Table")
             st.table(df)
+
+
 
 
 
