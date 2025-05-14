@@ -205,9 +205,9 @@ st.title("Electrocochleography Bedside Tool")
 # Upload XML file
 uploaded_file_list = st.file_uploader("Choose your XML file(s)", type="xml",accept_multiple_files=True)
 if len(uploaded_file_list) > 0:
+    uploaded_file_list = sorted(uploaded_file_list, key=lambda f: natural_key(f.name))
     # Select a measurement number
     st.subheader("Individual File Analysis")
-    uploaded_file_list = sorted(uploaded_file_list, key=lambda f: natural_key(f.name))
     harmonics_df_dict = {} #setting up for BFTR calculation
     file_index = 0
     for uploaded_file in uploaded_file_list:
@@ -330,8 +330,8 @@ if len(uploaded_file_list) > 0:
             harmonics_df_dict[uploaded_file.name] = harmonic_df
 
             fig, ax = plt.subplots()
-            ax.plot(harmonic_df["Recording Electrode"][:-1], harmonic_df["Fundamental Amplitude"][:-1],'-o')
-            ax.set_title(f"Amplitude vs Electrode for {int(harmonic_df['Fundamental Frequency (Hz)'][0])} Hz")
+            ax.plot(harmonic_df["Recording Electrode"][:], harmonic_df["Fundamental Amplitude"][:],'-o')
+            ax.set_title(f"Amplitude of F0 vs Electrode for {int(harmonic_df['Fundamental Frequency (Hz)'][0])} Hz")
             ax.set_xlabel("Recording Electrode")
             ax.set_ylabel("Amplitude (uV)")
             ax.set_xticklabels(harmonic_df["Recording Electrode"],rotation=45, ha="right")
@@ -344,7 +344,7 @@ if len(uploaded_file_list) > 0:
     for filename, values in max_amplitude_dict.items():
         response = values[0]  # First value is the response
         electrode = values[1]  # Second value is the electrode
-        data.append({"Filename": filename, "Response": response, "Electrode": electrode})
+        data.append({"Filename": filename, "BFTR (F0+F1+F3)": response, "Electrode": electrode})
 
     # Create a DataFrame
     df = pd.DataFrame(data)
@@ -353,10 +353,22 @@ if len(uploaded_file_list) > 0:
     st.write("Max Amplitude Table")
     st.table(df)
 
+  
 
+    # Create a vertical stack of subplots (one column, multiple rows)
+    fig, ax = plt.subplots(len(uploaded_file_list), 1, figsize=(8, 4 * len(uploaded_file_list)))
+    ax = np.atleast_1d(ax)  # Ensure ax is always iterable even if only 1 plot
 
+    for i, (key, df) in enumerate(harmonics_df_dict.items()):
+        ax[i].plot(df["Recording Electrode"], df["Fundamental Amplitude"], '-o')
+        ax[i].set_title(f"Amplitude of F0 vs Electrode for {int(df['Fundamental Frequency (Hz)'][0])} Hz")
+        ax[i].set_xlabel("Recording Electrode")
+        ax[i].set_ylabel("Amplitude (uV)")
+        ax[i].set_xticks(df["Recording Electrode"])  # Ensure ticks are set
+        ax[i].set_xticklabels(df["Recording Electrode"], rotation=45, ha="right")
 
-
+    plt.tight_layout()
+    st.pyplot(fig)
 
 ####Code Graveyard
         # if (type == "Round Window"):
