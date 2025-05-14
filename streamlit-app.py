@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ETree
 import control
 import scipy as sc
 import streamlit.components.v1 as components
-
+import re
 
 
 def find_nearest_idx(array, value):
@@ -141,7 +141,6 @@ def parse_xml(uploaded_file):
     ECochG_Series.index = ECochG_Series.index + 1
     ECochG_Series['Measurement Number'] = ECochG_Series.index
     current_frequency = int(ECochG_Series['Frequency'][1][1:])
-    print(f"Current Frequency: {current_frequency}")
     # Display columns for verification
     # recording_electrode = ECochG_Series.loc[ECochG_Series['RecordingActiveElectrode'] == 'ICE20', 'Measurement Number'].values
     # print(f"Example Recording Electrode: {recording_electrode}")
@@ -196,6 +195,10 @@ def extract_max_amplitude(dataframe):
 
     return highest, recording_electrode
 
+def natural_key(s):
+    return [int(text) if text.isdigit() else text.lower()
+            for text in re.split(r'(\d+)', s)]
+
 ##########Begin Main Call##############
 st.title("Electrocochleography Bedside Tool")
 
@@ -204,7 +207,7 @@ uploaded_file_list = st.file_uploader("Choose your XML file(s)", type="xml",acce
 if len(uploaded_file_list) > 0:
     # Select a measurement number
     st.subheader("Individual File Analysis")
-
+    uploaded_file_list = sorted(uploaded_file_list, key=lambda f: natural_key(f.name))
     harmonics_df_dict = {} #setting up for BFTR calculation
     file_index = 0
     for uploaded_file in uploaded_file_list:
@@ -349,8 +352,6 @@ if len(uploaded_file_list) > 0:
     # Display the DataFrame in Streamlit
     st.write("Max Amplitude Table")
     st.table(df)
-    for item in freq_array:
-        print(item)
 
 
 
