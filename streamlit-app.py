@@ -129,10 +129,6 @@ def parse_xml(uploaded_file):
             B = {}
             for i in list(subelem):
                 B.update({i.tag: i.text})
-
-            # Extract the Recording Active Electrode from the Measurements
-
-            # print(f'Contents of B: {B}')
             A.append(B)
 
     ECochG_Series = pd.DataFrame(A)
@@ -201,7 +197,7 @@ def natural_key(s):
 
 ##########Begin Main Call##############
 st.title("Electrocochleography Bedside Tool")
-
+plt.close('all')
 # Upload XML file
 uploaded_file_list = st.file_uploader("Choose your XML file(s)", type="xml",accept_multiple_files=True)
 if len(uploaded_file_list) > 0:
@@ -218,37 +214,44 @@ if len(uploaded_file_list) > 0:
             unique_measurement_numbers = difference_data['Measurement Number'].unique()
             harmonic_data = []
             seen_02 = False
+
+            print(f"Meas Nums: {unique_measurement_numbers}")
             for index, x_p in enumerate(unique_measurement_numbers):
                 df = difference_data.loc[difference_data['Measurement Number'] == x_p].astype(
                     "float").dropna()
-                recording_electrode = ECochG_Series.loc[
-                    ECochG_Series['Measurement Number'] == x_p,
-                    'RecordingActiveElectrode'
-                ].values[0]
-                if seen_02:
-                    include = False
+                # print(f"Current Series : {ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p]}")
+                subset = ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p]
+
+                if subset.empty:
+                    print("The DataFrame is empty.")
                 else:
-                    include = True
+                    print("The DataFrame is not empty.")
+                    recording_electrode = ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p, 'RecordingActiveElectrode'].values[0]
+                    if seen_02:
+                        include = False
+                    else:
+                        include = True
 
-                if recording_electrode == "ICE02":
-                    seen_02 = True
+                    if recording_electrode == "ICE02":
+                        seen_02 = True
 
-                # Extract time and voltage
-                time = df['Time(us)']
-                voltage = df['Sample(uV)']
+                    # Extract time and voltage
+                    time = df['Time(us)']
+                    voltage = df['Sample(uV)']
+                    voltage = np.asarray(voltage, dtype=np.float64)
 
-                # Create columns for side-by-side plots
-                col1, col2 = st.columns(2)
+                    # Create columns for side-by-side plots
+                    col1, col2 = st.columns(2)
 
-                with col1:
-                    # Plot R-C Difference
-                    st.subheader(f"R-C Difference Electrode {recording_electrode}")
-                    fig_linechart, ax_linechart = plt.subplots()
+                    with col1:
+                        # Plot R-C Difference
+                        st.subheader(f"R-C Difference Electrode {recording_electrode}")
+                        fig_linechart, ax_linechart = plt.subplots()
 
-                    ax_linechart.plot(time/1000, voltage, linewidth=1.0)
-                    ax_linechart.set_xlabel('Time (ms)')
-                    ax_linechart.set_ylabel('Sample (uV)')
-                    st.pyplot(fig_linechart)
+                        ax_linechart.plot(time/1000, voltage, linewidth=1.0)
+                        ax_linechart.set_xlabel('Time (ms)')
+                        ax_linechart.set_ylabel('Sample (uV)')
+                        st.pyplot(fig_linechart)
 
                 # Fast Fourier Transformation
                 Fs250 = 20900  # Hz
@@ -359,13 +362,25 @@ if len(uploaded_file_list) > 0:
     fig, ax = plt.subplots(len(uploaded_file_list), 1, figsize=(8, 4 * len(uploaded_file_list)))
     ax = np.atleast_1d(ax)  # Ensure ax is always iterable even if only 1 plot
 
+
+    def extract_number(electrode_name):
+        # Extracts the numeric part from something like "ICE22"
+        match = re.search(r'\d+', electrode_name)
+        return int(match.group()) if match else -1
+
+
     for i, (key, df) in enumerate(harmonics_df_dict.items()):
-        ax[i].plot(df["Recording Electrode"], df["Fundamental Amplitude"], '-o')
-        ax[i].set_title(f"Amplitude of F0 vs Electrode for {int(df['Fundamental Frequency (Hz)'][0])} Hz")
+        # Sort by numeric part of electrode name (descending)
+        df_sorted = df.copy()
+        df_sorted["ElectrodeNumber"] = df_sorted["Recording Electrode"].apply(extract_number)
+        df_sorted = df_sorted.sort_values(by="ElectrodeNumber", ascending=False)
+
+        ax[i].plot(df_sorted["Recording Electrode"], df_sorted["Fundamental Amplitude"], '-o')
+        ax[i].set_title(f"Amplitude of F0 vs Electrode for {int(df_sorted['Fundamental Frequency (Hz)'].iloc[0])} Hz")
         ax[i].set_xlabel("Recording Electrode")
         ax[i].set_ylabel("Amplitude (uV)")
-        ax[i].set_xticks(df["Recording Electrode"])  # Ensure ticks are set
-        ax[i].set_xticklabels(df["Recording Electrode"], rotation=45, ha="right")
+        ax[i].set_xticks(df_sorted["Recording Electrode"])
+        ax[i].set_xticklabels(df_sorted["Recording Electrode"], rotation=45, ha="right")
 
     plt.tight_layout()
     st.pyplot(fig)
