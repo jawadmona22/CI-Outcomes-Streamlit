@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ETree
-import control
 import scipy as sc
 import streamlit.components.v1 as components
 import re
@@ -79,21 +78,10 @@ def sum_harmonics_by_peak(fft_data,freq_vector, limit):
     # First harmonic is at the fundamental frequency index (highest peak)
     first_harmonic = magnitude[fundamental_index]
 
-    # Second harmonic is at 2 times the fundamental frequency index
-    second_harmonic_index = 2 * fundamental_index
-    second_harmonic = magnitude[second_harmonic_index] if second_harmonic_index < len(magnitude) else 0
-
-    # Third harmonic is at 3 times the fundamental frequency index
-    third_harmonic_index = 3 * fundamental_index
-    third_harmonic = magnitude[third_harmonic_index] if third_harmonic_index < len(magnitude) else 0
-
-    # Sum of the first, second, and third harmonics
-    harmonic_sum = first_harmonic + second_harmonic + third_harmonic
-
     #Find the noise floor
     threshold = noise_floor_calculation(first_harmonic_freq=first_harmonic,freq_array=freq_vector,amplitude_array=magnitude)
 
-    return harmonic_sum, fundamental_index, threshold
+    return fundamental_index, threshold
     
 def extract_data(df, trace_type):
     df1 = df['Y'].str.split(" ", expand=True)
@@ -175,6 +163,7 @@ def parse_xml(uploaded_file):
     rarefaction_data = extract_data(rarefaction, 'RAREFACTION')
     sum_data = extract_data(Sum, 'SUM')
     difference_data = extract_data(difference, 'DIFFERENCE')
+
     return condensation_data,rarefaction_data,sum_data,difference_data,ECochG_Series, current_frequency
 
 def extract_max_amplitude(dataframe):
@@ -214,18 +203,28 @@ if len(uploaded_file_list) > 0:
             unique_measurement_numbers = difference_data['Measurement Number'].unique()
             harmonic_data = []
             seen_02 = False
+            #Get indices of time series between 6ms (6000us) and 15ms (15,000 ms)
+
+
 
             print(f"Meas Nums: {unique_measurement_numbers}")
             for index, x_p in enumerate(unique_measurement_numbers):
                 df = difference_data.loc[difference_data['Measurement Number'] == x_p].astype(
                     "float").dropna()
-                # print(f"Current Series : {ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p]}")
+                
+                df = df[(df["Time(us)"] > 3000) & (df["Time(us)"] <=15000)] ##Windowing
+
+                sf = sum_data.loc[sum_data['Measurement Number'] == x_p].astype(
+                    "float").dropna()
+                
+                sf = sf[(sf["Time(us)"] > 3000) & (sf["Time(us)"] <=15000)]
+
+                
                 subset = ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p]
 
                 if subset.empty:
                     print("The DataFrame is empty.")
                 else:
-                    print("The DataFrame is not empty.")
                     recording_electrode = ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p, 'RecordingActiveElectrode'].values[0]
                     if seen_02:
                         include = False
@@ -235,10 +234,13 @@ if len(uploaded_file_list) > 0:
                     if recording_electrode == "ICE02":
                         seen_02 = True
 
+
+                    ##Difference Data Time Series##
+
                     # Extract time and voltage
-                    time = df['Time(us)']
-                    voltage = df['Sample(uV)']
-                    voltage = np.asarray(voltage, dtype=np.float64)
+                    d_time = df['Time(us)']
+                    d_voltage = df['Sample(uV)']
+                    d_voltage = np.asarray(d_voltage, dtype=np.float64)
 
                     # Create columns for side-by-side plots
                     col1, col2 = st.columns(2)
@@ -248,21 +250,47 @@ if len(uploaded_file_list) > 0:
                         st.subheader(f"R-C Difference Electrode {recording_electrode}")
                         fig_linechart, ax_linechart = plt.subplots()
 
-                        ax_linechart.plot(time/1000, voltage, linewidth=1.0)
+                        ax_linechart.plot(d_time/1000, d_voltage, linewidth=1.0)
                         ax_linechart.set_xlabel('Time (ms)')
                         ax_linechart.set_ylabel('Sample (uV)')
                         st.pyplot(fig_linechart)
 
-                # Fast Fourier Transformation
+                
+                    
+                    ##Sum Data Time Series## 
+                    # Extract time and voltage
+                    s_time = sf['Time(us)']
+                    s_voltage = sf['Sample(uV)']
+                    s_voltage = np.asarray(s_voltage, dtype=np.float64)
+
+                    with col1:
+                        # Plot R-C Difference
+                        st.subheader(f"R-C Sum Electrode {recording_electrode}")
+                        fig_linechart, ax_linechart = plt.subplots()
+
+                        ax_linechart.plot(s_time/1000, s_voltage, linewidth=1.0)
+                        ax_linechart.set_xlabel('Time (ms)')
+                        ax_linechart.set_ylabel('Sample (uV)')
+                        st.pyplot(fig_linechart)
+
+                # Difference Fast Fourier Transformation
                 Fs250 = 20900  # Hz
-                L250 = len(voltage)
+                L250 = len(d_voltage)
                 NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 3)
-                Y250 = np.fft.fft(voltage, NFFT250) / L250
+                Y250 = np.fft.fft(d_voltage, NFFT250) / L250
                 freq_array = (Fs250 / 2) * np.linspace(0, 1, NFFT250 // 2 + 1)
                 amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
-                # Find harmonics after the limit of the file given
-                harmonic_sum, fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,current_frequency)
+                # Sum Fast Fourier Transformation
+                SL250 = len(s_voltage)
+                SNFFT250 = 2 ** (int(np.ceil(np.log2(SL250))) + 3)
+                SY250 = np.fft.fft(s_voltage, NFFT250) / SL250
+                s_freq_array = (Fs250 / 2) * np.linspace(0, 1, SNFFT250 // 2 + 1)
+                s_amplitude = 2 * np.abs(SY250[:SNFFT250 // 2 + 1])
+
+
+                # Find harmonics after the limit of the file given for DIFFERENCE. 1st and third are from diff, second from SUM.
+                fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,current_frequency)
                 # Fundamental frequency and amplitude
                 fundamental_freq = freq_array[fundamental_index]
                 fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
@@ -270,8 +298,8 @@ if len(uploaded_file_list) > 0:
                 # Second harmonic frequency and amplitude
                 second_harmonic_index = 2 * fundamental_index
                 if second_harmonic_index < len(freq_array):
-                    second_harmonic_freq = freq_array[second_harmonic_index]
-                    second_harmonic_amp = amplitude[second_harmonic_index] if amplitude[second_harmonic_index] > threshold else 0
+                    second_harmonic_freq = s_freq_array[second_harmonic_index]
+                    second_harmonic_amp = s_amplitude[second_harmonic_index] if s_amplitude[second_harmonic_index] > threshold else 0
                 else:
                     second_harmonic_freq = None
                     second_harmonic_amp = 0
@@ -303,7 +331,7 @@ if len(uploaded_file_list) > 0:
                 })
 
                 with col2:
-                    # Plot FFT
+                    # Plot Difference FFT
                     st.subheader(f'FFT Electrode {recording_electrode}')
                     fig_fft, ax_fft = plt.subplots()
                     ax_fft.plot(freq_array, amplitude, linewidth=1.0)
@@ -314,14 +342,29 @@ if len(uploaded_file_list) > 0:
                     ax_fft.plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
                                 label=f'1st Harmonic: {int(fundamental_freq)} Hz')
 
-                    if second_harmonic_freq:
-                        ax_fft.plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*',
-                                    markersize=10,
-                                    label=f'2nd Harmonic: {int(second_harmonic_freq):.2f} Hz')
+      
                     if third_harmonic_freq:
                         ax_fft.plot(third_harmonic_freq, amplitude[3 * fundamental_index], 'b*',
                                     markersize=10,
                                     label=f'3rd Harmonic: {int(third_harmonic_freq):.2f} Hz')
+                    ax_fft.legend()
+                    st.pyplot(fig_fft)
+
+                    # Plot Sum FFT
+                    st.subheader(f'FFT Electrode {recording_electrode}')
+                    fig_fft, ax_fft = plt.subplots()
+                    ax_fft.plot(s_freq_array, s_amplitude, linewidth=1.0)
+                    ax_fft.set_xlim([0, 9000])
+                    ax_fft.set_title(f'FFT Measurement {x_p}')
+                    ax_fft.set_xlabel('Frequency (Hz)')
+                    ax_fft.set_ylabel('Amplitude (microvolts)')
+                    ax_fft.plot(fundamental_freq, s_amplitude[fundamental_index])
+
+                    if second_harmonic_freq:
+                        ax_fft.plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*',
+                                    markersize=10,
+                                    label=f'2nd Harmonic: {int(second_harmonic_freq):.2f} Hz')
+                  
                     ax_fft.legend()
                     st.pyplot(fig_fft)
 
@@ -500,4 +543,9 @@ if len(uploaded_file_list) > 0:
         #     st.pyplot(fig)
 
 
+#######SUMMARY OF NEXT STEPS
 
+#1: The second harmonic should be extracted from the SUM not the DIFFERENCE
+#2: We need to window the SUM/DIFFERENCE to only be taking data from 6-15s into account
+#3: The BFTR should be calculated from the electrode with the highest fundamental frequency
+#4: We want a table with the individual harmonics and the BFTS highlighted.
