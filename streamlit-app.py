@@ -166,19 +166,19 @@ def parse_xml(uploaded_file):
 
     return condensation_data,rarefaction_data,sum_data,difference_data,ECochG_Series, current_frequency
 
-def extract_max_amplitude(dataframe):
+def extract_max_amplitude(dataframe):  ##Changed to now extract max fundamental frequency
     highest = 0
     electrode = 0
     filtered_df = dataframe[dataframe["Include_In_BFTR"] == True]
 
-    for item in filtered_df["Total Amplitude"]:
+    for item in filtered_df["Fundamental Amplitude"]:
 
         if item > highest:
             highest = item
-            recording_electrode = filtered_df.loc[filtered_df['Total Amplitude'] == highest, 'Recording Electrode'].values
+            recording_electrode = filtered_df.loc[filtered_df['Fundamental Amplitude'] == highest, 'Recording Electrode'].values
+            bftr = filtered_df.loc[filtered_df['Fundamental Amplitude'] == highest, 'Total Amplitude'].values
 
-
-    return highest, recording_electrode
+    return highest, recording_electrode,bftr
 
 def natural_key(s):
     return [int(text) if text.isdigit() else text.lower()
@@ -204,7 +204,14 @@ if len(uploaded_file_list) > 0:
             harmonic_data = []
             seen_02 = False
             #Get indices of time series between 6ms (6000us) and 15ms (15,000 ms)
-
+            time_window = st.slider(
+                "Select time window (in microseconds)",
+                min_value=0,
+                max_value=20000,
+                value=(6000, 15000),
+                step=100
+            )
+            start_time, end_time = time_window
 
 
             print(f"Meas Nums: {unique_measurement_numbers}")
@@ -212,12 +219,12 @@ if len(uploaded_file_list) > 0:
                 df = difference_data.loc[difference_data['Measurement Number'] == x_p].astype(
                     "float").dropna()
                 
-                df = df[(df["Time(us)"] > 3000) & (df["Time(us)"] <=15000)] ##Windowing
+                df = df[(df["Time(us)"] > start_time) & (df["Time(us)"] <=end_time)] ##Windowing
 
                 sf = sum_data.loc[sum_data['Measurement Number'] == x_p].astype(
                     "float").dropna()
                 
-                sf = sf[(sf["Time(us)"] > 3000) & (sf["Time(us)"] <=15000)]
+                sf = sf[(sf["Time(us)"] > start_time) & (sf["Time(us)"] <=end_time)]
 
                 
                 subset = ECochG_Series.loc[ECochG_Series['Measurement Number'] == x_p]
@@ -390,7 +397,8 @@ if len(uploaded_file_list) > 0:
     for filename, values in max_amplitude_dict.items():
         response = values[0]  # First value is the response
         electrode = values[1]  # Second value is the electrode
-        data.append({"Filename": filename, "BFTR (F0+F1+F3)": response, "Electrode": electrode})
+        bftr = values[2][0]
+        data.append({"Filename": filename, "BFTR (F0+F1+F3)": bftr, "Electrode": electrode})
 
     # Create a DataFrame
     df = pd.DataFrame(data)
@@ -545,7 +553,7 @@ if len(uploaded_file_list) > 0:
 
 #######SUMMARY OF NEXT STEPS
 
-#1: The second harmonic should be extracted from the SUM not the DIFFERENCE
-#2: We need to window the SUM/DIFFERENCE to only be taking data from 6-15s into account
-#3: The BFTR should be calculated from the electrode with the highest fundamental frequency
-#4: We want a table with the individual harmonics and the BFTS highlighted.
+#1: The second harmonic should be extracted from the SUM not the DIFFERENCE (DONE)
+#2: We need to window the SUM/DIFFERENCE to only be taking data from 6-15s into account (DONE)
+#3: The BFTR should be calculated from the electrode with the highest fundamental frequency (DONE)
+#4: We want a table with the individual harmonics and the BFTRs highlighted.
