@@ -209,7 +209,8 @@ if len(uploaded_file_list) > 0:
                 min_value=0,
                 max_value=20000,
                 value=(6000, 15000),
-                step=100
+                step=100,
+                key=lambda f: natural_key(f.name) + 'f'
             )
             start_time, end_time = time_window
 
