@@ -284,14 +284,16 @@ if len(uploaded_file_list) > 0:
                 # Difference Fast Fourier Transformation
                 Fs250 = 20900  # Hz
                 L250 = len(d_voltage)
-                NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 3)
+                NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 4)
+
                 Y250 = np.fft.fft(d_voltage, NFFT250) / L250
                 freq_array = (Fs250 / 2) * np.linspace(0, 1, NFFT250 // 2 + 1)
+                print(freq_array)
                 amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
                 # Sum Fast Fourier Transformation
                 SL250 = len(s_voltage)
-                SNFFT250 = 2 ** (int(np.ceil(np.log2(SL250))) + 3)
+                SNFFT250 = 2 ** (int(np.ceil(np.log2(SL250))) + 4)
                 SY250 = np.fft.fft(s_voltage, NFFT250) / SL250
                 s_freq_array = (Fs250 / 2) * np.linspace(0, 1, SNFFT250 // 2 + 1)
                 s_amplitude = 2 * np.abs(SY250[:SNFFT250 // 2 + 1])
