@@ -21,29 +21,28 @@ def noise_floor_calculation(first_harmonic_freq, freq_array, amplitude_array):
     num_bins = 3
 
     start_freq = (9 * bin_width) + first_harmonic_freq
-    start_idx = find_nearest_idx(freq_array, start_freq)
+    noise_values = []
 
-    bin_means = []
-
-    # Calculate means for each 62 Hz bin
     for i in range(num_bins):
-        # Determine the start and end frequencies for each bin
+        # Get frequency range for the bin
         bin_start_freq = start_freq + (i * bin_width)
         bin_end_freq = bin_start_freq + bin_width
 
-        # Find the start and end indices for each bin
+        # Get index range
         bin_start_idx = find_nearest_idx(freq_array, bin_start_freq)
         bin_end_idx = find_nearest_idx(freq_array, bin_end_freq)
 
-        # Calculate the mean amplitude for this bin
-        bin_mean = np.mean(amplitude_array[bin_start_idx:bin_end_idx + 1])
-        bin_means.append(bin_mean)
+        # Append raw amplitude values in the bin
+        noise_values.extend(amplitude_array[bin_start_idx:bin_end_idx + 1])
 
-    # Calculate variance and standard deviation of the bin means
-    variance = np.var(bin_means)
-    std_deviation = np.sqrt(variance)
-    threshold = 3*std_deviation
+    # Convert to numpy array in case it isn't
+    noise_values = np.array(noise_values)
 
+    # Compute mean and std
+    mean_noise = np.mean(noise_values)
+    std_noise = np.std(noise_values)
+
+    threshold = mean_noise + 3 * std_noise
     return threshold
 
 
@@ -276,19 +275,19 @@ if len(uploaded_file_list) > 0:
                 L250 = len(d_voltage) 
     
 
-                NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 2)
+                NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 3)
                 # print("NFFT250 ", NFFT250)
 
                 Y250 = np.fft.fft(d_voltage, NFFT250) / L250
-                freq_array = ((Fs250 / 2) * np.linspace(0, 1, NFFT250 // 2 + 1))
+                freq_array = Fs250 / 2 * np.linspace(0, 1, NFFT250 // 2 + 1)
                 # print(f"Freq Array for Electrode {recording_electrode}", freq_array)
                 amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
                 # Sum Fast Fourier Transformation
                 SL250 = len(s_voltage)
-                SNFFT250 = 2 ** (int(np.ceil(np.log2(SL250))) + 2)
+                SNFFT250 = 2 ** (int(np.ceil(np.log2(SL250))) + 3)
                 SY250 = np.fft.fft(s_voltage, NFFT250) / SL250
-                s_freq_array = (Fs250 / 2) * np.linspace(0, 1, SNFFT250 // 2 + 1)
+                s_freq_array = Fs250 / 2 * np.linspace(0, 1, SNFFT250 // 2 + 1)
                 s_amplitude = 2 * np.abs(SY250[:SNFFT250 // 2 + 1])
 
 
