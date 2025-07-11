@@ -142,12 +142,14 @@ def parse_xml(uploaded_file):
     rarefaction = df2[df2['TraceType'] == 'RAREFACTION'].reset_index()
     Sum = df2[df2['TraceType'] == 'SUM'].reset_index()
     difference = df2[df2['TraceType'] == 'DIFFERENCE'].reset_index()
+    
 
     # Extracting data
     condensation_data = extract_data(condensation, 'CONDENSATION')
     rarefaction_data = extract_data(rarefaction, 'RAREFACTION')
     sum_data = extract_data(Sum, 'SUM')
     difference_data = extract_data(difference, 'DIFFERENCE')
+ 
 
     return condensation_data,rarefaction_data,sum_data,difference_data,ECochG_Series, current_frequency
 
@@ -192,20 +194,20 @@ if len(uploaded_file_list) > 0:
             time_window = st.slider(
                 "Select time window (in microseconds)",
                 min_value=0,
-                max_value=20000,
-                value=(6000, 15000),
-                step=100,
+                max_value=45000,
+                # value=(6000, 15000),
+                value=(1992, 16789),
+                step=50,
                 key=lambda f: natural_key(f.name) + 'f'
             )
             start_time, end_time = time_window
 
 
-            print(f"Meas Nums: {unique_measurement_numbers}")
             for index, x_p in enumerate(unique_measurement_numbers):
                 df = difference_data.loc[difference_data['Measurement Number'] == x_p].astype(
                     "float").dropna()
                 
-                df = df[(df["Time(us)"] > start_time) & (df["Time(us)"] <=end_time)] ##Windowing
+                df = df[(df["Time(us)"] >= start_time) & (df["Time(us)"] <=end_time)] ##Windowing
 
                 sf = sum_data.loc[sum_data['Measurement Number'] == x_p].astype(
                     "float").dropna()
@@ -232,7 +234,10 @@ if len(uploaded_file_list) > 0:
 
                     # Extract time and voltage
                     d_time = df['Time(us)']
+                    
                     d_voltage = df['Sample(uV)']
+                    # print("D_Voltage Length", len(d_voltage))
+                    # print(d_voltage)
                     d_voltage = np.asarray(d_voltage, dtype=np.float64)
 
                     # Create columns for side-by-side plots
@@ -268,17 +273,20 @@ if len(uploaded_file_list) > 0:
 
                 # Difference Fast Fourier Transformation
                 Fs250 = 20900  # Hz
-                L250 = len(d_voltage)
-                NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 4)
+                L250 = len(d_voltage) 
+    
+
+                NFFT250 = 2 ** (int(np.ceil(np.log2(L250))) + 2)
+                # print("NFFT250 ", NFFT250)
 
                 Y250 = np.fft.fft(d_voltage, NFFT250) / L250
-                freq_array = (Fs250 / 2) * np.linspace(0, 1, NFFT250 // 2 + 1)
-                print(freq_array)
+                freq_array = ((Fs250 / 2) * np.linspace(0, 1, NFFT250 // 2 + 1))
+                # print(f"Freq Array for Electrode {recording_electrode}", freq_array)
                 amplitude = 2 * np.abs(Y250[:NFFT250 // 2 + 1])
 
                 # Sum Fast Fourier Transformation
                 SL250 = len(s_voltage)
-                SNFFT250 = 2 ** (int(np.ceil(np.log2(SL250))) + 4)
+                SNFFT250 = 2 ** (int(np.ceil(np.log2(SL250))) + 2)
                 SY250 = np.fft.fft(s_voltage, NFFT250) / SL250
                 s_freq_array = (Fs250 / 2) * np.linspace(0, 1, SNFFT250 // 2 + 1)
                 s_amplitude = 2 * np.abs(SY250[:SNFFT250 // 2 + 1])
