@@ -372,8 +372,17 @@ if len(uploaded_file_list) > 0:
 
             # Create a DataFrame from harmonic data and display it
             harmonic_df = pd.DataFrame(harmonic_data)
+            def highlight_zeros(val):
+                color = 'red' if val == 0 else 'black'
+                return f'color: {color}'
+
+            # Apply the style to all values in the DataFrame
+            styled_df = harmonic_df.style.applymap(highlight_zeros)
+
+            # Display with Streamlit
             st.subheader("Harmonic Data")
-            st.write(harmonic_df)
+            st.write("Red 0s indicate where values were below the noise floor threshold")
+            st.dataframe(styled_df)
 
             harmonics_df_dict[uploaded_file.name] = harmonic_df
 
