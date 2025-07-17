@@ -197,7 +197,7 @@ if len(uploaded_file_list) > 0:
                 # value=(6000, 15000),
                 value=(1992, 16789),
                 step=50,
-                key=lambda f: natural_key(f.name) + 'f'
+                key='slider' + uploaded_file.name
             )
             start_time, end_time = time_window
 
