@@ -251,6 +251,7 @@ if len(uploaded_file_list) > 0:
                         ax_linechart.set_xlabel('Time (ms)')
                         ax_linechart.set_ylabel('Sample (uV)')
                         st.pyplot(fig_linechart)
+                        plt.close(fig_linechart)
 
                 
                     
@@ -269,6 +270,7 @@ if len(uploaded_file_list) > 0:
                         ax_linechart.set_xlabel('Time (ms)')
                         ax_linechart.set_ylabel('Sample (uV)')
                         st.pyplot(fig_linechart)
+                        plt.close(fig_linechart)
 
                 # Difference Fast Fourier Transformation
                 Fs250 = 20900  # Hz
@@ -351,6 +353,7 @@ if len(uploaded_file_list) > 0:
                                     label=f'3rd Harmonic: {int(third_harmonic_freq):.2f} Hz')
                     ax_fft.legend()
                     st.pyplot(fig_fft)
+                    plt.close(fig_fft)
 
                     # Plot Sum FFT
                     st.subheader(f'FFT Electrode {recording_electrode}')
@@ -369,6 +372,7 @@ if len(uploaded_file_list) > 0:
                   
                     ax_fft.legend()
                     st.pyplot(fig_fft)
+                    plt.close(fig_fft)
 
             # Create a DataFrame from harmonic data and display it
             harmonic_df = pd.DataFrame(harmonic_data)
@@ -385,6 +389,7 @@ if len(uploaded_file_list) > 0:
             st.dataframe(styled_df)
 
             harmonics_df_dict[uploaded_file.name] = harmonic_df
+            plt.close('all')
 
             fig, ax = plt.subplots()
             ax.plot(harmonic_df["Recording Electrode"][:], harmonic_df["Fundamental Amplitude"][:],'-o')
@@ -393,6 +398,7 @@ if len(uploaded_file_list) > 0:
             ax.set_ylabel("Amplitude (uV)")
             ax.set_xticklabels(harmonic_df["Recording Electrode"],rotation=45, ha="right")
             st.pyplot(fig)
+            plt.close(fig)
 
 
     st.subheader("Best Frequency Total Response")
@@ -439,5 +445,6 @@ if len(uploaded_file_list) > 0:
 
     plt.tight_layout()
     st.pyplot(fig)
+    plt.close(fig)
 
 
