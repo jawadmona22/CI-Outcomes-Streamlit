@@ -158,11 +158,15 @@ def extract_max_amplitude(dataframe):  ##Changed to now extract max fundamental 
     filtered_df = dataframe[dataframe["Include_In_BFTR"] == True]
 
     for item in filtered_df["Fundamental Amplitude"]:
-
+        print(item)
         if item > highest:
             highest = item
             recording_electrode = filtered_df.loc[filtered_df['Fundamental Amplitude'] == highest, 'Recording Electrode'].values
             bftr = filtered_df.loc[filtered_df['Fundamental Amplitude'] == highest, 'Total Amplitude'].values
+
+    if highest == 0: #Edge case where even the fundamental amplitudes are all 0
+        recording_electrode = "N/A"
+        bftr = ["N/A",1] #dummy variable to mimic shape for extraction
 
     return highest, recording_electrode,bftr
 
