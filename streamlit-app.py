@@ -236,7 +236,8 @@ if mode == "Advanced Bionics":
                         col1, col2 = st.columns(2) #Setting up the layout columns
 
                         sub_df = CM_data[CM_data["Electrode Number"] == electrode].iloc[:, 53:-2]
-                        voltage = sub_df.mean(axis=0)
+                        voltage = sub_df.to_numpy().ravel()
+
                         x = np.linspace(0,1000,len(voltage))
                         
                         with col1: 
@@ -251,7 +252,7 @@ if mode == "Advanced Bionics":
                         with col2:
                 
                             ##FFT calculation
-                            FsRecording = 20900
+                            FsRecording = 9280.30303 #20900
                             LRecording = len(x)  #check that this is right... 
                             NFFT = 2 ** (int(np.ceil(np.log2(LRecording))) + 3)
 
@@ -261,7 +262,8 @@ if mode == "Advanced Bionics":
 
                             fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,freqHz)
                             # Fundamental frequency and amplitude
-                            fundamental_freq = freq_array[fundamental_index]
+                            # fundamental_freq = freq_array[fundamental_index]
+                            fundamental_freq = freqHz
                             fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
                             second_harmonic_index = 2 * fundamental_index
 
@@ -276,13 +278,13 @@ if mode == "Advanced Bionics":
                      
                             st.subheader(f'FFT Electrode {electrode}')
                             fig_fft, ax_fft = plt.subplots()
-                            ax_fft.plot(freq_array, amplitude, linewidth=1.0)
-                            ax_fft.set_xlim([0, 9000])
+                            ax_fft.plot(freq_array, amplitude,linewidth=1.0)
+                            ax_fft.set_xlim([0, 4500])
                             ax_fft.set_xlabel('Frequency (Hz)')
                             fig_fft.set_size_inches(6, 3)
                             ax_fft.set_ylabel('Amplitude (microvolts)')
-                            ax_fft.plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10,
-                                        label=f'1st Harmonic: {int(fundamental_freq)} Hz')
+                            print("Amplitude of Max", amplitude[fundamental_index])
+                            ax_fft.plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10, label=f'1st Harmonic: {int(fundamental_freq)} Hz')
                             ax_fft.legend()
                             st.pyplot(fig_fft)
                             plt.close(fig_fft)
