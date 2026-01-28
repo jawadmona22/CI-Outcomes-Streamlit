@@ -9,10 +9,10 @@ import re
 
 
 def find_nearest_idx(array, value):
+    
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     return idx
-
 
 
 
@@ -217,6 +217,8 @@ if mode == "Advanced Bionics":
             with st.expander(f"File: {uploaded_file.name}"):
                     
                     col1, col2 = st.columns(2) #Setting up the layout columns
+                    metadata = pd.read_excel(uploaded_file, nrows=13)
+                    freqHz = metadata["Unnamed: 2"][10]
 
                     df = pd.read_excel(uploaded_file, skiprows=35)  #Unnamed 53 is where the CM data starts
 
@@ -224,7 +226,6 @@ if mode == "Advanced Bionics":
                     CM_data = df[df["Type"] == "CM"]
 
                     CM_data["Electrode Number"] = CM_data["Unnamed: 9"]
-                    print(CM_data["Electrode Number"])
 
                     ####Plotting the Cochler Microphonic####
                     
@@ -255,7 +256,7 @@ if mode == "Advanced Bionics":
                             freq_array = FsRecording / 2 * np.linspace(0, 1, NFFT // 2 + 1)
                             amplitude = 2 * np.abs(Y[:NFFT // 2 + 1])
 
-                            fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,750)
+                            fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,freqHz)
                             # Fundamental frequency and amplitude
                             fundamental_freq = freq_array[fundamental_index]
                             fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
