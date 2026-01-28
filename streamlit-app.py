@@ -186,6 +186,9 @@ def set_background(color):
         unsafe_allow_html=True
     )
 
+def highlight_zeros(val):
+                    color = 'red' if val == 0 else 'black'
+                    return f'color: {color}'
 ##########Begin Main Call##############
 
 
@@ -209,13 +212,14 @@ if mode == "Advanced Bionics":
     
         uploaded_file_list = sorted(uploaded_file_list, key=lambda f: natural_key(f.name))
         st.subheader("Individual File Analysis")
-        harmonics_df_dict = {} #setting up for BFTR calculation
+        harmonics_df_dict = {}  #setting up for BFTR calculation
         file_index = 0
         electrodes = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
         for uploaded_file in uploaded_file_list:
             file_index +=1
             with st.expander(f"File: {uploaded_file.name}"):
-                    
+                    harmonic_data = []
+
                     col1, col2 = st.columns(2) #Setting up the layout columns
                     metadata = pd.read_excel(uploaded_file, nrows=13)
                     freqHz = metadata["Unnamed: 2"][10]
@@ -228,7 +232,6 @@ if mode == "Advanced Bionics":
                     CM_data["Electrode Number"] = CM_data["Unnamed: 9"]
 
                     ####Plotting the Cochler Microphonic####
-                    
                     for electrode in electrodes: 
                         col1, col2 = st.columns(2) #Setting up the layout columns
 
@@ -260,7 +263,17 @@ if mode == "Advanced Bionics":
                             # Fundamental frequency and amplitude
                             fundamental_freq = freq_array[fundamental_index]
                             fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
+                            second_harmonic_index = 2 * fundamental_index
 
+                            # Third harmonic frequency and amplitude
+                            third_harmonic_index = 3 * fundamental_index
+                            if third_harmonic_index < len(freq_array):
+                                third_harmonic_freq = freq_array[third_harmonic_index]
+                                third_harmonic_amp = amplitude[third_harmonic_index] if amplitude[third_harmonic_index] > threshold else 0
+                            else:
+                                third_harmonic_freq = None
+                                third_harmonic_amp = 0
+                     
                             st.subheader(f'FFT Electrode {electrode}')
                             fig_fft, ax_fft = plt.subplots()
                             ax_fft.plot(freq_array, amplitude, linewidth=1.0)
@@ -273,6 +286,87 @@ if mode == "Advanced Bionics":
                             ax_fft.legend()
                             st.pyplot(fig_fft)
                             plt.close(fig_fft)
+
+                            second_harmonic_amp = 0 ##TODO: Remove placeholder##
+
+                            total_amp = fundamental_amp + second_harmonic_amp + third_harmonic_amp
+
+                            # Append the data for this measurement to the list
+                            harmonic_data.append({
+                                'Recording Electrode':electrode,
+                                'Fundamental Frequency (Hz)': fundamental_freq,
+                                'Fundamental Amplitude': fundamental_amp,
+                                # 'Second Harmonic Frequency (Hz)': second_harmonic_freq,
+                                'Second Harmonic Amplitude': second_harmonic_amp,
+                                'Third Harmonic Frequency (Hz)': third_harmonic_freq,
+                                'Third Harmonic Amplitude': third_harmonic_amp,
+                                'Total Amplitude': total_amp,
+                                'Include_In_BFTR':True ##TODO: Change
+                            })
+                    harmonic_df = pd.DataFrame(harmonic_data)
+                        # Apply the style to all values in the DataFrame
+                    styled_df = harmonic_df.style.applymap(highlight_zeros)
+
+                    # Display with Streamlit
+                    st.subheader("Harmonic Data")
+                    st.write("Red 0s indicate where values were below the noise floor threshold")
+                    st.dataframe(styled_df)
+
+                    harmonics_df_dict[uploaded_file.name] = harmonic_df
+                    plt.close('all')
+
+                    fig, ax = plt.subplots()
+                    ax.plot(harmonic_df["Recording Electrode"][:], harmonic_df["Fundamental Amplitude"][:],'-o')
+                    ax.set_title(f"Amplitude of F0 vs Electrode for {int(harmonic_df['Fundamental Frequency (Hz)'][0])} Hz")
+                    ax.set_xlabel("Recording Electrode")
+                    ax.set_ylabel("Amplitude (uV)")
+                    ax.set_xticklabels(harmonic_df["Recording Electrode"],rotation=45, ha="right")
+                    st.pyplot(fig)
+                    plt.close(fig)
+            st.subheader("Best Frequency Total Response")
+            max_amplitude_dict = {key: extract_max_amplitude(value) for key, value in harmonics_df_dict.items()}
+            data = []
+            for filename, values in max_amplitude_dict.items():
+                response = values[0]  # First value is the response
+                electrode = values[1]  # Second value is the electrode
+                bftr = values[2][0]
+                data.append({"Filename": filename, "BFTR (F0+F1+F3)": bftr, "Electrode": electrode})
+
+            # Create a DataFrame
+            df = pd.DataFrame(data)
+
+            # Display the DataFrame in Streamlit
+            st.write("Max Amplitude Table")
+            st.table(df)
+
+
+            # Create a vertical stack of subplots (one column, multiple rows)
+            fig, ax = plt.subplots(len(uploaded_file_list), 1, figsize=(8, 4 * len(uploaded_file_list)))
+            ax = np.atleast_1d(ax)  # Ensure ax is always iterable even if only 1 plot
+
+
+            def extract_number(electrode_name):
+                # Extracts the numeric part from something like "ICE22"
+                match = re.search(r'\d+', electrode_name)
+                return int(match.group()) if match else -1
+
+
+            for i, (key, df) in enumerate(harmonics_df_dict.items()):
+                # Sort by numeric part of electrode name (descending)
+                df_sorted = df.copy()
+                df_sorted["ElectrodeNumber"] = df_sorted["Recording Electrode"]
+                df_sorted = df_sorted.sort_values(by="ElectrodeNumber", ascending=False)
+
+                ax[i].plot(df_sorted["Recording Electrode"], df_sorted["Fundamental Amplitude"], '-o')
+                ax[i].set_title(f"Amplitude of F0 vs Electrode for {int(df_sorted['Fundamental Frequency (Hz)'].iloc[0])} Hz")
+                ax[i].set_xlabel("Recording Electrode")
+                ax[i].set_ylabel("Amplitude (uV)")
+                ax[i].set_xticks(df_sorted["Recording Electrode"])
+                ax[i].set_xticklabels(df_sorted["Recording Electrode"], rotation=45, ha="right")
+
+            plt.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)
 
 
 
@@ -485,9 +579,7 @@ elif mode == "Cochlear":
 
                 # Create a DataFrame from harmonic data and display it
                 harmonic_df = pd.DataFrame(harmonic_data)
-                def highlight_zeros(val):
-                    color = 'red' if val == 0 else 'black'
-                    return f'color: {color}'
+                
 
                 # Apply the style to all values in the DataFrame
                 styled_df = harmonic_df.style.applymap(highlight_zeros)
