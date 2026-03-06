@@ -219,12 +219,25 @@ if mode == "Advanced Bionics":
             file_index +=1
             with st.expander(f"File: {uploaded_file.name}"):
                     harmonic_data = []
+                    # Get indices of time series between 6ms (6000us) and 15ms (15,000 ms)
+                    time_window = st.slider(
+                        "Select time window (in microseconds)",
+                        min_value=0,
+                        max_value=1000000,
+                        # value=(6000, 15000),
+                        value=(281050, 718100),
+                        step=50,
+                        key='slider' + uploaded_file.name
+                    )
+                    start_time, end_time = time_window
+
 
                     col1, col2 = st.columns(2) #Setting up the layout columns
                     metadata = pd.read_excel(uploaded_file, nrows=13)
                     freqHz = metadata["Unnamed: 2"][10]
 
                     df = pd.read_excel(uploaded_file, skiprows=35)  #Unnamed 53 is where the CM data starts
+
 
 
                     CM_data = df[df["Type"] == "CM"]
@@ -237,8 +250,13 @@ if mode == "Advanced Bionics":
 
                         sub_df = CM_data[CM_data["Electrode Number"] == electrode].iloc[:, 53:-2]
                         voltage = sub_df.to_numpy().ravel()
-
-                        x = np.linspace(0,1000,len(voltage))
+                        #Correction for time window
+                        sample_per_ms = len(voltage)/1000
+                        ms_per_sample = 1000/len(voltage)
+                        start_time_samples = int((start_time/1000)*sample_per_ms)
+                        end_time_samples = int((end_time/1000)*sample_per_ms)
+                        voltage = voltage[start_time_samples:end_time_samples]
+                        x = np.linspace(start_time_samples * ms_per_sample,end_time_samples*ms_per_sample,len(voltage))
                         
                         with col1: 
                             st.subheader(f"CM Electrode {electrode}")
@@ -266,6 +284,7 @@ if mode == "Advanced Bionics":
                             fundamental_freq = freqHz
                             fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
                             second_harmonic_index = 2 * fundamental_index
+                            max_amp = np.max(amplitude[fundamental_index-15:fundamental_index+15])
 
                             # Third harmonic frequency and amplitude
                             third_harmonic_index = 3 * fundamental_index
@@ -280,11 +299,14 @@ if mode == "Advanced Bionics":
                             fig_fft, ax_fft = plt.subplots()
                             ax_fft.plot(freq_array, amplitude,linewidth=1.0)
                             ax_fft.set_xlim([0, 4500])
+                            ax_fft.set_ylim([0,200])
                             ax_fft.set_xlabel('Frequency (Hz)')
                             fig_fft.set_size_inches(6, 3)
                             ax_fft.set_ylabel('Amplitude (microvolts)')
-                            print("Amplitude of Max", amplitude[fundamental_index])
-                            ax_fft.plot(fundamental_freq, amplitude[fundamental_index], 'r*', markersize=10, label=f'1st Harmonic: {int(fundamental_freq)} Hz')
+
+
+                            ax_fft.plot(freq_array[fundamental_index], max_amp, 'r*', markersize=10, label=f'1st Harmonic: {int(fundamental_freq)} Hz')
+
                             ax_fft.legend()
                             st.pyplot(fig_fft)
                             plt.close(fig_fft)
@@ -297,7 +319,7 @@ if mode == "Advanced Bionics":
                             harmonic_data.append({
                                 'Recording Electrode':electrode,
                                 'Fundamental Frequency (Hz)': fundamental_freq,
-                                'Fundamental Amplitude': fundamental_amp,
+                                'Fundamental Amplitude': max_amp,
                                 # 'Second Harmonic Frequency (Hz)': second_harmonic_freq,
                                 'Second Harmonic Amplitude': second_harmonic_amp,
                                 'Third Harmonic Frequency (Hz)': third_harmonic_freq,
@@ -317,14 +339,14 @@ if mode == "Advanced Bionics":
                     harmonics_df_dict[uploaded_file.name] = harmonic_df
                     plt.close('all')
 
-                    fig, ax = plt.subplots()
-                    ax.plot(harmonic_df["Recording Electrode"][:], harmonic_df["Fundamental Amplitude"][:],'-o')
-                    ax.set_title(f"Amplitude of F0 vs Electrode for {int(harmonic_df['Fundamental Frequency (Hz)'][0])} Hz")
-                    ax.set_xlabel("Recording Electrode")
-                    ax.set_ylabel("Amplitude (uV)")
-                    ax.set_xticklabels(harmonic_df["Recording Electrode"],rotation=45, ha="right")
-                    st.pyplot(fig)
-                    plt.close(fig)
+                    # fig, ax = plt.subplots()
+                    # ax.plot(harmonic_df["Recording Electrode"][:], harmonic_df["Fundamental Amplitude"][:],'-o')
+                    # ax.set_title(f"Amplitude of F0 vs Electrode for {int(harmonic_df['Fundamental Frequency (Hz)'][0])} Hz")
+                    # ax.set_xlabel("Recording Electrode")
+                    # ax.set_ylabel("Amplitude (uV)")
+                    # ax.set_xticklabels(harmonic_df["Recording Electrode"],rotation=45, ha="right")
+                    # st.pyplot(fig)
+                    # plt.close(fig)
             st.subheader("Best Frequency Total Response")
             max_amplitude_dict = {key: extract_max_amplitude(value) for key, value in harmonics_df_dict.items()}
             data = []
