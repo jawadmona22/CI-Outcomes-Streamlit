@@ -296,7 +296,7 @@ if mode == "Advanced Bionics":
                                 fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
 
                                 fundamental_amps.append(fundamental_amp)
-                       
+                                print(amplitude)
                                 max_amp = np.max(amplitude[fundamental_index-30:fundamental_index+30])
                                 max_amps.append(max_amp)
 
