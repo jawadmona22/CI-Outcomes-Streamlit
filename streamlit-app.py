@@ -280,7 +280,7 @@ if mode == "Advanced Bionics":
                         with col2:
                 
                             ##FFT calculation
-                            FsRecording = 9280.30303 #20900
+                            FsRecording =  9280.30303#20900
                             LRecording = len(x)  #check that this is right... 
                             NFFT = 2 ** (int(np.ceil(np.log2(LRecording))) + 3)
 
@@ -832,97 +832,75 @@ elif mode == "IHS":
             file_index +=1
             with st.expander(f"File: {uploaded_file.name}"):
                     harmonic_data = []
+                    df = pd.read_csv(uploaded_file, sep=",",skiprows=24)  # change sep to match your format
+
                     # Get indices of time series between 6ms (6000us) and 15ms (15,000 ms)
                     time_window = st.slider(
                         "Select time window (in microseconds)",
                         min_value=0,
-                        max_value=1000000,
+                        max_value=len(df["Data Pnt:"]),
                         # value=(6000, 15000),
                         value=(281050, 718100),
                         step=50,
                         key='slider' + uploaded_file.name
                     )
                     start_time, end_time = time_window
-                    df = pd.read_csv(uploaded_file, sep=",",skiprows=24)  # change sep to match your format
+                    print(df.columns)
+                    voltage = df["Average(uV):"]
+                    freqs_present = [250, 500, 750, 1000] 
 
-            #         col1, col2 = st.columns(2) #Setting up the layout columns
-            #         metadata = pd.read_excel(uploaded_file, nrows=13)
-            #         freqHz = metadata["Unnamed: 2"][10]
-
-            #         df = pd.read_excel(uploaded_file, skiprows=35)  #Unnamed 53 is where the CM data starts
-
-
-
-            #         CM_data = df[df["Type"] == "CM"]
-
-            #         CM_data["Electrode Number"] = CM_data["Unnamed: 9"]
-
-            #         ####Plotting the Cochler Microphonic####
-            #         for electrode in electrodes: 
-            #             col1, col2 = st.columns(2) #Setting up the layout columns
-
-            #             sub_df = CM_data[CM_data["Electrode Number"] == electrode].iloc[:, 53:-2]
-            #             voltage = sub_df.to_numpy().ravel()
-            #             #Correction for time window
-            #             sample_per_ms = len(voltage)/1000
-            #             ms_per_sample = 1000/len(voltage)
-            #             start_time_samples = int((start_time/1000)*sample_per_ms)
-            #             end_time_samples = int((end_time/1000)*sample_per_ms)
-            #             voltage = voltage[start_time_samples:end_time_samples]
-            #             x = np.linspace(start_time_samples * ms_per_sample,end_time_samples*ms_per_sample,len(voltage))
+                    col1, col2 = st.columns(2) #Setting up the layout columns
+           
+                    sample_per_ms = len(voltage)/1000
+                    ms_per_sample = 1000/len(voltage)
+                    start_time_samples = int((start_time/1000)*sample_per_ms)
+                    end_time_samples = int((end_time/1000)*sample_per_ms)
+                    voltage = voltage[start_time_samples:end_time_samples]
+                    x = np.linspace(start_time_samples * ms_per_sample,end_time_samples*ms_per_sample,len(voltage))
                         
-            #             with col1: 
-            #                 st.subheader(f"CM Electrode {electrode}")
-            #                 fig_linechart, ax_linechart = plt.subplots()
-            #                 ax_linechart.plot(x, voltage, linewidth=1.0)
-            #                 ax_linechart.set_xlabel('Time (ms)')
-            #                 ax_linechart.set_ylabel('Sample (uV)')
-            #                 fig_linechart.set_size_inches(6, 3)
-            #                 st.pyplot(fig_linechart)
-            #                 plt.close(fig_linechart)
-            #             with col2:
-                
-            #                 ##FFT calculation
-            #                 FsRecording = 9280.30303 #20900
-            #                 LRecording = len(x)  #check that this is right... 
-            #                 NFFT = 2 ** (int(np.ceil(np.log2(LRecording))) + 3)
+                    with col1: 
+                        st.write("Cochlear Microphonic")
+                        fig_linechart, ax_linechart = plt.subplots()
+                        ax_linechart.plot(x, voltage, linewidth=1.0)
+                        ax_linechart.set_xlabel('Time (ms)')
+                        ax_linechart.set_ylabel('Sample (uV)')
+                        fig_linechart.set_size_inches(6, 3)
+                        st.pyplot(fig_linechart)
+                        plt.close(fig_linechart)
+                    with col2:
+            
+                        ##FFT calculation
+                        st.write("FFT Analysis")
+                        FsRecording = 40000
+                        LRecording = len(x)  #check that this is right... 
+                        NFFT = 2 ** (int(np.ceil(np.log2(LRecording))) + 3)
 
-            #                 Y = np.fft.fft(voltage, NFFT) / LRecording
-            #                 freq_array = FsRecording / 2 * np.linspace(0, 1, NFFT // 2 + 1)
-            #                 amplitude = 2 * np.abs(Y[:NFFT // 2 + 1])
+                        Y = np.fft.fft(voltage, NFFT) / LRecording
+                        freq_array = FsRecording / 2 * np.linspace(0, 1, NFFT // 2 + 1)
+                        amplitude = 2 * np.abs(Y[:NFFT // 2 + 1])
+                        fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,250)
+                        # Fundamental frequency and amplitude
+                        # fundamental_freq = freq_array[fundamental_index]
+                        fundamental_freq = 250
+                        fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
+                        second_harmonic_index = 2 * fundamental_index
+                        max_amp = np.max(amplitude[fundamental_index-15:fundamental_index+15])
 
-            #                 fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,freqHz)
-            #                 # Fundamental frequency and amplitude
-            #                 # fundamental_freq = freq_array[fundamental_index]
-            #                 fundamental_freq = freqHz
-            #                 fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
-            #                 second_harmonic_index = 2 * fundamental_index
-            #                 max_amp = np.max(amplitude[fundamental_index-15:fundamental_index+15])
-
-            #                 # Third harmonic frequency and amplitude
-            #                 third_harmonic_index = 3 * fundamental_index
-            #                 if third_harmonic_index < len(freq_array):
-            #                     third_harmonic_freq = freq_array[third_harmonic_index]
-            #                     third_harmonic_amp = amplitude[third_harmonic_index] if amplitude[third_harmonic_index] > threshold else 0
-            #                 else:
-            #                     third_harmonic_freq = None
-            #                     third_harmonic_amp = 0
-                     
-            #                 st.subheader(f'FFT Electrode {electrode}')
-            #                 fig_fft, ax_fft = plt.subplots()
-            #                 ax_fft.plot(freq_array, amplitude,linewidth=1.0)
-            #                 ax_fft.set_xlim([0, 4500])
-            #                 ax_fft.set_ylim([0,200])
-            #                 ax_fft.set_xlabel('Frequency (Hz)')
-            #                 fig_fft.set_size_inches(6, 3)
-            #                 ax_fft.set_ylabel('Amplitude (microvolts)')
+                    
+                        fig_fft, ax_fft = plt.subplots()
+                        ax_fft.plot(freq_array, amplitude,linewidth=1.0)
+                        ax_fft.set_xlim([0, 4500])
+                        ax_fft.set_ylim([0,np.max(amplitude[5:])*1.1])
+                        ax_fft.set_xlabel('Frequency (Hz)')
+                        fig_fft.set_size_inches(6, 3)
+                        ax_fft.set_ylabel('Amplitude (microvolts)')
 
 
-            #                 ax_fft.plot(freq_array[fundamental_index], max_amp, 'r*', markersize=10, label=f'1st Harmonic: {int(fundamental_freq)} Hz')
+                        ax_fft.plot(freq_array[fundamental_index], max_amp, 'r*', markersize=10, label=f'1st Harmonic: {int(fundamental_freq)} Hz')
 
-            #                 ax_fft.legend()
-            #                 st.pyplot(fig_fft)
-            #                 plt.close(fig_fft)
+                        ax_fft.legend()
+                        st.pyplot(fig_fft)
+                        plt.close(fig_fft)
 
             #                 second_harmonic_amp = 0 ##TODO: Remove placeholder##
 
