@@ -233,22 +233,29 @@ if mode == "Advanced Bionics":
 
 
                     col1, col2 = st.columns(2) #Setting up the layout columns
-                    metadata = pd.read_excel(uploaded_file, nrows=13)
+                    metadata = pd.read_excel(uploaded_file, nrows=31)
+                    freqs_present = metadata[metadata["Settings"] == "RequestedFrequencies"].drop("Settings",axis=1).values.flatten()[1:]
+                    print(f"Freqs present: {freqs_present}")
+
+
+
                     freqHz = metadata["Unnamed: 2"][10]
+
 
                     df = pd.read_excel(uploaded_file, skiprows=35)  #Unnamed 53 is where the CM data starts
 
 
-
                     CM_data = df[df["Type"] == "CM"]
 
-                    CM_data["Electrode Number"] = CM_data["Unnamed: 9"]
+                    CM_data["Electrode Number"] = CM_data["Unnamed: 15"]
 
                     ####Plotting the Cochler Microphonic####
                     for electrode in electrodes: 
                         col1, col2 = st.columns(2) #Setting up the layout columns
 
-                        sub_df = CM_data[CM_data["Electrode Number"] == electrode].iloc[:, 53:-2]
+                        sub_df = CM_data[CM_data["Electrode Number"] == electrode].iloc[:, 84:]
+
+                
                         voltage = sub_df.to_numpy().ravel()
                         #Correction for time window
                         sample_per_ms = len(voltage)/1000
@@ -277,55 +284,50 @@ if mode == "Advanced Bionics":
                             Y = np.fft.fft(voltage, NFFT) / LRecording
                             freq_array = FsRecording / 2 * np.linspace(0, 1, NFFT // 2 + 1)
                             amplitude = 2 * np.abs(Y[:NFFT // 2 + 1])
+                            fundamental_indices = []
+                            thresholds = []
+                            fundamental_amps = []
+                            max_amps = []
+                            for freq in freqs_present:
+                                
+                                fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,freq)
+                                fundamental_indices.append(fundamental_index)
+                                thresholds.append(threshold)
+                                fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
 
-                            fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,freqHz)
-                            # Fundamental frequency and amplitude
-                            # fundamental_freq = freq_array[fundamental_index]
-                            fundamental_freq = freqHz
-                            fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
-                            second_harmonic_index = 2 * fundamental_index
-                            max_amp = np.max(amplitude[fundamental_index-15:fundamental_index+15])
+                                fundamental_amps.append(fundamental_amp)
+                       
+                                max_amp = np.max(amplitude[fundamental_index-30:fundamental_index+30])
+                                max_amps.append(max_amp)
 
-                            # Third harmonic frequency and amplitude
-                            third_harmonic_index = 3 * fundamental_index
-                            if third_harmonic_index < len(freq_array):
-                                third_harmonic_freq = freq_array[third_harmonic_index]
-                                third_harmonic_amp = amplitude[third_harmonic_index] if amplitude[third_harmonic_index] > threshold else 0
-                            else:
-                                third_harmonic_freq = None
-                                third_harmonic_amp = 0
+                     
                      
                             st.subheader(f'FFT Electrode {electrode}')
                             fig_fft, ax_fft = plt.subplots()
                             ax_fft.plot(freq_array, amplitude,linewidth=1.0)
                             ax_fft.set_xlim([0, 4500])
-                            ax_fft.set_ylim([0,200])
+                            ax_fft.set_ylim([0,50])
                             ax_fft.set_xlabel('Frequency (Hz)')
                             fig_fft.set_size_inches(6, 3)
                             ax_fft.set_ylabel('Amplitude (microvolts)')
-
-
-                            ax_fft.plot(freq_array[fundamental_index], max_amp, 'r*', markersize=10, label=f'1st Harmonic: {int(fundamental_freq)} Hz')
+                            markers = ["r*", "g*", "b*","m*"]  # Add more markers if you have more frequencies
+                            for idx, freq in enumerate(freqs_present):
+                            
+                                ax_fft.plot(freq_array[fundamental_indices[idx]], max_amps[idx], markers[idx], markersize=10, label=f'1st Harmonic: {int(freq)} Hz')
 
                             ax_fft.legend()
                             st.pyplot(fig_fft)
                             plt.close(fig_fft)
 
-                            second_harmonic_amp = 0 ##TODO: Remove placeholder##
 
-                            total_amp = fundamental_amp + second_harmonic_amp + third_harmonic_amp
 
                             # Append the data for this measurement to the list
                             harmonic_data.append({
                                 'Recording Electrode':electrode,
-                                'Fundamental Frequency (Hz)': fundamental_freq,
-                                'Fundamental Amplitude': max_amp,
-                                # 'Second Harmonic Frequency (Hz)': second_harmonic_freq,
-                                'Second Harmonic Amplitude': second_harmonic_amp,
-                                'Third Harmonic Frequency (Hz)': third_harmonic_freq,
-                                'Third Harmonic Amplitude': third_harmonic_amp,
-                                'Total Amplitude': total_amp,
-                                'Include_In_BFTR':True ##TODO: Change
+                                f'F0 {freqs_present[0]} (Hz)': max_amps[0] if max_amps[0] > thresholds[0] else 0,
+                                f'F0 {freqs_present[1]} (Hz)': max_amps[1] if max_amps[1] > thresholds[1] else 0,
+                                f'F0 {freqs_present[2]} (Hz)': max_amps[2] if max_amps[2] > thresholds[2] else 0,
+                                f'F0 {freqs_present[3]} (Hz)': max_amps[3] if max_amps[3] > thresholds[3] else 0,
                             })
                     harmonic_df = pd.DataFrame(harmonic_data)
                         # Apply the style to all values in the DataFrame
@@ -339,59 +341,21 @@ if mode == "Advanced Bionics":
                     harmonics_df_dict[uploaded_file.name] = harmonic_df
                     plt.close('all')
 
-                    # fig, ax = plt.subplots()
-                    # ax.plot(harmonic_df["Recording Electrode"][:], harmonic_df["Fundamental Amplitude"][:],'-o')
-                    # ax.set_title(f"Amplitude of F0 vs Electrode for {int(harmonic_df['Fundamental Frequency (Hz)'][0])} Hz")
-                    # ax.set_xlabel("Recording Electrode")
-                    # ax.set_ylabel("Amplitude (uV)")
-                    # ax.set_xticklabels(harmonic_df["Recording Electrode"],rotation=45, ha="right")
-                    # st.pyplot(fig)
-                    # plt.close(fig)
-            st.subheader("Best Frequency Total Response")
-            max_amplitude_dict = {key: extract_max_amplitude(value) for key, value in harmonics_df_dict.items()}
-            data = []
-            for filename, values in max_amplitude_dict.items():
-                response = values[0]  # First value is the response
-                electrode = values[1]  # Second value is the electrode
-                bftr = values[2][0]
-                data.append({"Filename": filename, "BFTR (F0+F1+F3)": bftr, "Electrode": electrode})
+                 
+                    for idx, freq in enumerate(freqs_present):
+                            fig, ax = plt.subplots(figsize=(8, 4))
+                            ax.plot(harmonic_df["Recording Electrode"][:], harmonic_df[f'F0 {freqs_present[idx]} (Hz)'][:],'-o')
+                            ax.set_title(f"Amplitude of F0 vs Electrode for {int(freqs_present[idx])} Hz")
+                            ax.set_xlabel("Recording Electrode")
+                            ax.set_ylabel("Amplitude (uV)")
+                            # ax.set_xticklabels(harmonic_df["Recording Electrode"],rotation=45, ha="right")
+                            st.pyplot(fig)
+                            plt.close(fig)
 
-            # Create a DataFrame
-            df = pd.DataFrame(data)
-
-            # Display the DataFrame in Streamlit
-            st.write("Max Amplitude Table")
-            st.table(df)
+         
 
 
-            # Create a vertical stack of subplots (one column, multiple rows)
-            fig, ax = plt.subplots(len(uploaded_file_list), 1, figsize=(8, 4 * len(uploaded_file_list)))
-            ax = np.atleast_1d(ax)  # Ensure ax is always iterable even if only 1 plot
-
-
-            def extract_number(electrode_name):
-                # Extracts the numeric part from something like "ICE22"
-                match = re.search(r'\d+', electrode_name)
-                return int(match.group()) if match else -1
-
-
-            for i, (key, df) in enumerate(harmonics_df_dict.items()):
-                # Sort by numeric part of electrode name (descending)
-                df_sorted = df.copy()
-                df_sorted["ElectrodeNumber"] = df_sorted["Recording Electrode"]
-                df_sorted = df_sorted.sort_values(by="ElectrodeNumber", ascending=False)
-
-                ax[i].plot(df_sorted["Recording Electrode"], df_sorted["Fundamental Amplitude"], '-o')
-                ax[i].set_title(f"Amplitude of F0 vs Electrode for {int(df_sorted['Fundamental Frequency (Hz)'].iloc[0])} Hz")
-                ax[i].set_xlabel("Recording Electrode")
-                ax[i].set_ylabel("Amplitude (uV)")
-                ax[i].set_xticks(df_sorted["Recording Electrode"])
-                ax[i].set_xticklabels(df_sorted["Recording Electrode"], rotation=45, ha="right")
-
-            plt.tight_layout()
-            st.pyplot(fig)
-            plt.close(fig)
-
+           
 
 
 
@@ -699,7 +663,6 @@ elif mode == "IHS":
                     )
                     start_time, end_time = time_window
                     df = pd.read_csv(uploaded_file, sep=",",skiprows=24)  # change sep to match your format
-                    print(df.columns)
 
             #         col1, col2 = st.columns(2) #Setting up the layout columns
             #         metadata = pd.read_excel(uploaded_file, nrows=13)
