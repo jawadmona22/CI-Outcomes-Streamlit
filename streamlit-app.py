@@ -234,7 +234,7 @@ if mode == "Advanced Bionics":
 
                     col1, col2 = st.columns(2) #Setting up the layout columns
                     metadata = pd.read_excel(uploaded_file, nrows=31)
-                    freqs_present = metadata[metadata["Settings"] == "RequestedFrequencies"].drop("Settings",axis=1).values.flatten()[1:]
+                    freqs_present = metadata[metadata["Settings"] == "RequestedFrequencies"].drop("Settings",axis=1).values.flatten()[1:5]
                     print(f"Freqs present: {freqs_present}")
 
 
