@@ -52,14 +52,15 @@ def sum_harmonics_by_peak(fft_data,freq_vector, limit):
     #Find cut-off index of limit (which is the frequency we are testing at, e.g 250 or 500 or 1000)
     #Index isn't exact due to how freq_vector is formed
     cutoff_index = np.argmin(np.abs(freq_vector - limit))
-    magnitude = np.abs(fft_data[cutoff_index:])
-
-
+    print(cutoff_index)
+    magnitude = np.abs(fft_data)
+    window = 50
+    fundamental_index = np.argmax(fft_data[10:][cutoff_index-window:cutoff_index+window])+ cutoff_index - window + 10#ok in a window around the cutoff index to find the peak, accounts for slight discrepancies in frequency bins
     # Find the index of the highest peak (ignoring the DC component at index 0)
-    fundamental_index = np.argmax(fft_data[1:]) + 1 + cutoff_index # +1 to adjust for skipping index 0, +cutoff index to account for that
+    # fundamental_index = np.argmax(fft_data[1:]) + 1 + cutoff_index # +1 to adjust for skipping index 0, +cutoff index to account for that
 
-    if fundamental_index > cutoff_index: #prevent values above where we are looking
-        fundamental_index = cutoff_index
+    # if fundamental_index > cutoff_index: #prevent values above where we are looking
+    #     fundamental_index = cutoff_index
 
     # First harmonic is at the fundamental frequency index (highest peak)
     first_harmonic = magnitude[fundamental_index]
@@ -822,7 +823,7 @@ elif mode == "IHS":
 
     uploaded_file_list = st.file_uploader("Choose your text file(s)", type="txt", accept_multiple_files=True)
     if len(uploaded_file_list) > 0:
-    
+        
         uploaded_file_list = sorted(uploaded_file_list, key=lambda f: natural_key(f.name))
         st.subheader("Individual File Analysis")
         harmonics_df_dict = {}  #setting up for BFTR calculation
@@ -832,75 +833,101 @@ elif mode == "IHS":
             file_index +=1
             with st.expander(f"File: {uploaded_file.name}"):
                     harmonic_data = []
-                    df = pd.read_csv(uploaded_file, sep=",",skiprows=24)  # change sep to match your format
+                    uploaded_file.seek(0)
 
+                    IHS_metadata = pd.read_csv(uploaded_file, sep=",",nrows=24,header=None,index_col=0).dropna(axis=1,how='all').T  
+                    IHS_metadata.columns = [str(col).strip(':') for col in IHS_metadata.columns]
+                    freq_array = IHS_metadata['Stim. Freq.'].values.flatten()
+                    
+                
+                    uploaded_file.seek(0)
+                    header_row_index = 0
+
+                    for i, line in enumerate(uploaded_file):
+                        if b"Data Pnt:" in line:
+                            header_row_index = i
+                            break
+                    
+                    uploaded_file.seek(0)
+
+
+                    df = pd.read_csv(uploaded_file, sep=",",skiprows=header_row_index)  
+                    df.columns = [col.strip().strip(':') for col in df.columns]
+                    df = df.dropna(axis=1, how='all')
+                    print("DF Columns", df.columns)
                     # Get indices of time series between 6ms (6000us) and 15ms (15,000 ms)
                     time_window = st.slider(
                         "Select time window (in microseconds)",
                         min_value=0,
-                        max_value=len(df["Data Pnt:"]),
+                        max_value=len(df['Data Pnt']),
                         # value=(6000, 15000),
                         value=(281050, 718100),
                         step=50,
                         key='slider' + uploaded_file.name
                     )
                     start_time, end_time = time_window
-                    print(df.columns)
-                    voltage = df["Average(uV):"]
-                    freqs_present = [250, 500, 750, 1000] 
-
                     col1, col2 = st.columns(2) #Setting up the layout columns
-           
-                    sample_per_ms = len(voltage)/1000
-                    ms_per_sample = 1000/len(voltage)
-                    start_time_samples = int((start_time/1000)*sample_per_ms)
-                    end_time_samples = int((end_time/1000)*sample_per_ms)
-                    voltage = voltage[start_time_samples:end_time_samples]
-                    x = np.linspace(start_time_samples * ms_per_sample,end_time_samples*ms_per_sample,len(voltage))
+
+                    for idx, freq in enumerate(freq_array):
                         
-                    with col1: 
-                        st.write("Cochlear Microphonic")
-                        fig_linechart, ax_linechart = plt.subplots()
-                        ax_linechart.plot(x, voltage, linewidth=1.0)
-                        ax_linechart.set_xlabel('Time (ms)')
-                        ax_linechart.set_ylabel('Sample (uV)')
-                        fig_linechart.set_size_inches(6, 3)
-                        st.pyplot(fig_linechart)
-                        plt.close(fig_linechart)
-                    with col2:
+                        if idx == 0:
+                            tag = 'Average(uV)'
+                        
+                        else:
+                            tag = f'Average(uV):.{idx}'
+
+                        voltage = df[tag]
+
             
-                        ##FFT calculation
-                        st.write("FFT Analysis")
-                        FsRecording = 40000
-                        LRecording = len(x)  #check that this is right... 
-                        NFFT = 2 ** (int(np.ceil(np.log2(LRecording))) + 3)
+                        sample_per_ms = len(voltage)/1000
+                        ms_per_sample = 1000/len(voltage)
+                        start_time_samples = int((start_time/1000)*sample_per_ms)
+                        end_time_samples = int((end_time/1000)*sample_per_ms)
+                        voltage = voltage[start_time_samples:end_time_samples]
+                        x = np.linspace(start_time_samples * ms_per_sample,end_time_samples*ms_per_sample,len(voltage))
+                            
+                        with col1: 
+                            st.write("Cochlear Microphonic")
+                            fig_linechart, ax_linechart = plt.subplots()
+                            ax_linechart.plot(x, voltage, linewidth=1.0)
+                            ax_linechart.set_xlabel('Time (ms)')
+                            ax_linechart.set_ylabel('Sample (uV)')
+                            fig_linechart.set_size_inches(6, 3)
+                            st.pyplot(fig_linechart)
+                            plt.close(fig_linechart)
+                        with col2:
+                
+                            ##FFT calculation
+                            st.write("FFT Analysis")
+                            FsRecording = 40000
+                            LRecording = len(x)  #check that this is right... 
+                            NFFT = 2 ** (int(np.ceil(np.log2(LRecording))) + 3)
 
-                        Y = np.fft.fft(voltage, NFFT) / LRecording
-                        freq_array = FsRecording / 2 * np.linspace(0, 1, NFFT // 2 + 1)
-                        amplitude = 2 * np.abs(Y[:NFFT // 2 + 1])
-                        fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,250)
-                        # Fundamental frequency and amplitude
-                        # fundamental_freq = freq_array[fundamental_index]
-                        fundamental_freq = 250
-                        fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
-                        second_harmonic_index = 2 * fundamental_index
-                        max_amp = np.max(amplitude[fundamental_index-15:fundamental_index+15])
+                            Y = np.fft.fft(voltage, NFFT) / LRecording
+                            freq_array = FsRecording / 2 * np.linspace(0, 1, NFFT // 2 + 1)
+                            amplitude = 2 * np.abs(Y[:NFFT // 2 + 1])
+                            fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,int(freq))
+                            # Fundamental frequency and amplitude
+                            fundamental_freq = freq_array[fundamental_index]
+                            fundamental_freq = int(freq)
+                            fundamental_amp = amplitude[fundamental_index] # if amplitude[fundamental_index] > threshold else 0
+                            second_harmonic_index = 2 * fundamental_index
+                            max_amp = fundamental_amp
+                        
+                            fig_fft, ax_fft = plt.subplots()
+                            ax_fft.plot(freq_array[10:], amplitude[10:],linewidth=1.0)
+                            ax_fft.set_xlim([0, 4500])
+                            ax_fft.set_ylim([0,np.max(amplitude[10:])*1.1])
+                            ax_fft.set_xlabel('Frequency (Hz)')
+                            fig_fft.set_size_inches(6, 3)
+                            ax_fft.set_ylabel('Amplitude (microvolts)')
 
-                    
-                        fig_fft, ax_fft = plt.subplots()
-                        ax_fft.plot(freq_array, amplitude,linewidth=1.0)
-                        ax_fft.set_xlim([0, 4500])
-                        ax_fft.set_ylim([0,np.max(amplitude[5:])*1.1])
-                        ax_fft.set_xlabel('Frequency (Hz)')
-                        fig_fft.set_size_inches(6, 3)
-                        ax_fft.set_ylabel('Amplitude (microvolts)')
 
+                            ax_fft.plot(int(freq), max_amp, 'r*', markersize=10, label=f'{int(freq)} Hz')
 
-                        ax_fft.plot(freq_array[fundamental_index], max_amp, 'r*', markersize=10, label=f'1st Harmonic: {int(fundamental_freq)} Hz')
-
-                        ax_fft.legend()
-                        st.pyplot(fig_fft)
-                        plt.close(fig_fft)
+                            ax_fft.legend()
+                            st.pyplot(fig_fft)
+                            plt.close(fig_fft)
 
             #                 second_harmonic_amp = 0 ##TODO: Remove placeholder##
 
