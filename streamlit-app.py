@@ -46,18 +46,24 @@ def noise_floor_calculation(first_harmonic_freq, freq_array, amplitude_array):
     return threshold
 
 
-
-def sum_harmonics_by_peak(fft_data,freq_vector, limit):
-    #Find cut-off index of limit (which is the frequency we are testing at, e.g 250 or 500 or 1000)
-    #Index isn't exact due to how freq_vector is formed
-    cutoff_index = np.argmin(np.abs(freq_vector - limit))
-    print(cutoff_index)
+def sum_harmonics_by_peak(fft_data,freq_vector, limit,tolerance_hz=25):
+    freq_res = freq_vector[1] - freq_vector[0]
     magnitude = np.abs(fft_data)
-    window = 50
-    fundamental_index = np.argmax(fft_data[10:][cutoff_index-window:cutoff_index+window])+ cutoff_index - window + 10#ok in a window around the cutoff index to find the peak, accounts for slight discrepancies in frequency bins
+    cutoff_index = np.argmin(np.abs(freq_vector - limit))
 
+    window = int(np.ceil(tolerance_hz/freq_res))
+
+
+    lo = max(10,cutoff_index - window)
+    hi = min(len(magnitude),cutoff_index + window)
+    rough_idx = np.argmax(magnitude[lo:hi]) + lo
+
+    # fundamental_index = parabolic_peak(magnitude, rough_idx) # np.argmax(fft_data[10:][cutoff_index-window:cutoff_index+window])+ (cutoff_index - window + 10)#ok in a window around the cutoff index to find the peak, accounts for slight discrepancies in frequency bins
+
+    fundamental_index = int(rough_idx)
     first_harmonic = magnitude[fundamental_index]
 
+    print(f"Extracting HZ {freq_vector[fundamental_index]} at {first_harmonic}")
     #Find the noise floor
     threshold = noise_floor_calculation(first_harmonic_freq=first_harmonic,freq_array=freq_vector,amplitude_array=magnitude)
 
@@ -282,7 +288,7 @@ if mode == "Advanced Bionics":
                             freq_array = FsRecording / 2 * np.linspace(0, 1, NFFT // 2 + 1)
                             amplitude = 2 * np.abs(Y[:NFFT // 2 + 1])
                             freq_resolution = FsRecording / NFFT  # Hz per bin
-                            print(f"Freq resolution: {freq_resolution:.4f} Hz/bin, window = ±{window * freq_resolution:.1f} Hz")
+                            # print(f"Freq resolution: {freq_resolution:.4f} Hz/bin, window = ±{window * freq_resolution:.1f} Hz")
                             fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,freqHz)
                             # Fundamental frequency and amplitude
                             # fundamental_freq = freq_array[fundamental_index]
@@ -659,15 +665,14 @@ elif mode == "Cochlear":
                     s_freq_array = Fs250 / 2 * np.linspace(0, 1, SNFFT250 // 2 + 1)
                     s_amplitude = 2 * np.abs(SY250[:SNFFT250 // 2 + 1])
 
-
+                    print(np.array_equal(s_freq_array,freq_array))
                     # Find harmonics after the limit of the file given for DIFFERENCE. 1st and third are from diff, second from SUM.
                     fundamental_index, threshold = sum_harmonics_by_peak(amplitude, freq_array,current_frequency)
                     # Fundamental frequency and amplitude
                     fundamental_freq = freq_array[fundamental_index]
                     fundamental_amp = amplitude[fundamental_index] if amplitude[fundamental_index] > threshold else 0
-
                     # Second harmonic frequency and amplitude
-                    second_harmonic_index = 2 * fundamental_index
+                    second_harmonic_index, _ = sum_harmonics_by_peak(s_amplitude,s_freq_array,2 * current_frequency)
                     if second_harmonic_index < len(freq_array):
                         second_harmonic_freq = s_freq_array[second_harmonic_index]
                         second_harmonic_amp = s_amplitude[second_harmonic_index] if s_amplitude[second_harmonic_index] > threshold else 0
@@ -679,6 +684,7 @@ elif mode == "Cochlear":
                     third_harmonic_index = 3 * fundamental_index
                     if third_harmonic_index < len(freq_array):
                         third_harmonic_freq = freq_array[third_harmonic_index]
+
                         third_harmonic_amp = amplitude[third_harmonic_index] if amplitude[third_harmonic_index] > threshold else 0
                     else:
                         third_harmonic_freq = None
@@ -733,7 +739,7 @@ elif mode == "Cochlear":
                         ax_fft.plot(fundamental_freq, s_amplitude[fundamental_index])
 
                         if second_harmonic_freq:
-                            ax_fft.plot(second_harmonic_freq, amplitude[2 * fundamental_index], 'g*',
+                            ax_fft.plot(second_harmonic_freq, s_amplitude[second_harmonic_index], 'g*',
                                         markersize=10,
                                         label=f'2nd Harmonic: {int(second_harmonic_freq):.2f} Hz')
                     
